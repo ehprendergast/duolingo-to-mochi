@@ -3,7 +3,7 @@ import ImageUpload from './ImageUpload';
 import TextPairProcessor from './TextPairProcessor';
 import FormattedTextOutput from './FormattedTextOutput';
 import ImageProcessingPreview from './ImageProcessingPreview';
-import { processImageWithAzureOCR } from '../services/azureOCR';
+import { processImageWithTesseractOCR } from '../services/azureOCR';
 import { separateTextPairs, generateId } from '../utils/formatting';
 import { ProcessedTextPair, ImageProcessingResult } from '../types';
 import { AlertCircle, ArrowRight, Languages } from 'lucide-react';
@@ -35,7 +35,7 @@ const DuolingoProcessor: React.FC = () => {
       for (const result of newResults) {
         try {
           // Call OCR service with selected language
-          const ocrResult = await processImageWithAzureOCR(result.imageUrl, sourceLanguage);
+          const ocrResult = await processImageWithTesseractOCR(result.imageUrl, sourceLanguage);
           
           // Combine OCR lines into a single text
           const combinedText = ocrResult.map((r) => r.text).join('\n');
