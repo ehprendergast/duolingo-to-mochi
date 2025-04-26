@@ -85,8 +85,8 @@ export const separateTextPairs = (text: string, sourceLanguage: 'spa' | 'jpn'): 
       return { sourceText: '', translationText: '' };
     }
     
-    // Case 1: Two delimiters total (one in source, one in translation)
-    if (delimiters.length === 2) {
+    // Case 1: Two or three delimiters total (one in source, one in translation, potentially one extraneous)
+    if (delimiters.length === 2 || delimiters.length === 3) {
       const firstDelimiterPos = delimiters[0];
       const secondDelimiterPos = delimiters[1];
       
@@ -101,7 +101,7 @@ export const separateTextPairs = (text: string, sourceLanguage: 'spa' | 'jpn'): 
       return { sourceText, translationText };
     }
     
-    // Case 2: Four delimiters total (two in source, two in translation)
+    // Case 3: Four or more delimiters total (two in source, two in translation, more extraneous)
     if (delimiters.length >= 4) {
       const secondDelimiterPos = delimiters[1];
       const fourthDelimiterPos = delimiters[3];
@@ -119,14 +119,14 @@ export const separateTextPairs = (text: string, sourceLanguage: 'spa' | 'jpn'): 
     // Remove all spaces for Japanese source text
     const noSpacesText = normalizedText.replace(/\s+/g, '');
     
-    // Find the first occurrence of a Japanese delimiter
-    const delimiterMatch = noSpacesText.match(/[。！？]/);
+    // Find the last occurrence of a Japanese delimiter
+    const delimiterMatch = noSpacesText.match(/.*[。！？]/);
     
     if (delimiterMatch) {
       const delimiterPos = delimiterMatch.index!;
       const sourceText = noSpacesText.slice(0, delimiterPos + 1);
       
-      // Find the English translation after the delimiter
+      // Find the English translation after the Japanese delimiter
       const afterDelimiter = normalizedText.slice(normalizedText.indexOf(delimiterMatch[0]) + 1);
       const translationMatch = afterDelimiter.match(/([^。！？]+[.!?])/);
       
