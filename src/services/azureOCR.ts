@@ -4,7 +4,7 @@ import { OCRResult } from '../types';
 /**
  * Process an image using Tesseract.js OCR
  */
-export const processImageWithTesseractOCR = async (imageUrl: string, language: 'spa' | 'jpn'): Promise<OCRResult[]> => {
+export const processImageWithTesseractOCR = async (imageUrl: string, language: 'eng' | 'spa' | 'jpn'): Promise<OCRResult[]> => {
   try {
     const worker = await createWorker(language);
     
