@@ -101,7 +101,7 @@ export const separateTextPairs = (text: string, sourceLanguage: 'spa' | 'jpn'): 
       return { sourceText, translationText };
     }
     
-    // Case 3: Four or more delimiters total (two in source, two in translation, more extraneous)
+    // Case 2: Four or more delimiters total (two in source, two in translation, more extraneous)
     if (delimiters.length >= 4) {
       const secondDelimiterPos = delimiters[1];
       const fourthDelimiterPos = delimiters[3];
@@ -113,25 +113,29 @@ export const separateTextPairs = (text: string, sourceLanguage: 'spa' | 'jpn'): 
     }
   } else {
     // Japanese text processing
-    // Remove the 【 character if it exists at the start
-    normalizedText = normalizedText.replace(/^【/, '');
-    
-    // Remove all spaces for Japanese source text
-    const noSpacesText = normalizedText.replace(/\s+/g, '');
-    
-    // Find the last occurrence of a Japanese delimiter
-    const delimiterMatch = noSpacesText.match(/.*[。！？]/);
-    
-    if (delimiterMatch) {
-      const delimiterPos = delimiterMatch.index!;
-      const sourceText = noSpacesText.slice(0, delimiterPos + 1);
+    // First, clean up the text by removing unnecessary characters and spaces
+    normalizedText = normalizedText
+      .replace(/【/g, '') // Remove 【 characters
+      .replace(/】/g, '') // Remove 】 characters
+      .replace(/\s+/g, ' ') // Normalize spaces
+      .trim();
+
+    // Find the last Japanese sentence by matching everything up to the last Japanese delimiter
+    const japanesePattern = /^.*?([^。！？]+[。！？])/;
+    const match = normalizedText.match(japanesePattern);
+
+    if (match) {
+      // Strip spaces from the Japanese source text
+      const sourceText = match[1].replace(/\s+/g, '').trim();
       
-      // Find the English translation after the Japanese delimiter
-      const afterDelimiter = normalizedText.slice(normalizedText.indexOf(delimiterMatch[0]) + 1);
-      const translationMatch = afterDelimiter.match(/([^。！？]+[.!?])/);
+      // Get everything after the Japanese text for the translation
+      const remainingText = normalizedText.slice(match[0].length).trim();
+      
+      // Find the English translation by looking for sentence ending punctuation
+      const translationMatch = remainingText.match(/([^.!?]+[.!?])/);
       
       if (translationMatch) {
-        const translationText = translationMatch[0].trim();
+        const translationText = translationMatch[1].trim();
         return { sourceText, translationText };
       }
     }
