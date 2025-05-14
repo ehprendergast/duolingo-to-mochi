@@ -40,6 +40,10 @@ export const formatSourceWithSelections = (text: string, selections: string[]): 
       new RegExp(escapedSelection, 'g'),
       `{{${selection}}}`
     );
+
+    // Replace "| " with "I " to fix common OCR error
+    formattedText = formattedText.replace(/\| /g, 'I ');
+
   }
   
   return formattedText;
@@ -74,6 +78,9 @@ export const separateTextPairs = (text: string, sourceLanguage: 'spa' | 'jpn'): 
   // Remove line breaks and extra spaces
   let normalizedText = text.replace(/\n/g, ' ').trim();
   
+  let sourceText = '';
+  let translationText = '';
+
   if (sourceLanguage === 'spa') {
     // Spanish text processing - keep multiple spaces
     normalizedText = normalizedText.replace(/\s+/g, ' ');
@@ -81,35 +88,27 @@ export const separateTextPairs = (text: string, sourceLanguage: 'spa' | 'jpn'): 
     // Find all delimiter positions
     const delimiters = [...normalizedText.matchAll(/[.!?]/g)].map(match => match.index);
     
-    if (delimiters.length === 0) {
-      return { sourceText: '', translationText: '' };
-    }
-    
-    // Case 1: Two or three delimiters total (one in source, one in translation, potentially one extraneous)
-    if (delimiters.length === 2 || delimiters.length === 3) {
-      const firstDelimiterPos = delimiters[0];
-      const secondDelimiterPos = delimiters[1];
-      
-      // Find the space after the first delimiter to separate source and translation
-      const textAfterFirstDelimiter = normalizedText.slice(firstDelimiterPos! + 1);
-      const firstSpaceAfterDelimiter = textAfterFirstDelimiter.search(/\s/);
-      const sourceEndPos = firstDelimiterPos! + firstSpaceAfterDelimiter + 1;
-      
-      const sourceText = normalizedText.slice(0, sourceEndPos).trim();
-      const translationText = normalizedText.slice(sourceEndPos, secondDelimiterPos! + 1).trim();
-      
-      return { sourceText, translationText };
-    }
-    
-    // Case 2: Four or more delimiters total (two in source, two in translation, more extraneous)
-    if (delimiters.length >= 4) {
-      const secondDelimiterPos = delimiters[1];
-      const fourthDelimiterPos = delimiters[3];
-      
-      const sourceText = normalizedText.slice(0, secondDelimiterPos! + 1).trim();
-      const translationText = normalizedText.slice(secondDelimiterPos! + 1, fourthDelimiterPos! + 1).trim();
-      
-      return { sourceText, translationText };
+    if (delimiters.length >= 2) {
+      if (delimiters.length === 2 || delimiters.length === 3) {
+        // Case 1: Two or three delimiters total (one in source, one in translation, potentially one extraneous)
+        const firstDelimiterPos = delimiters[0];
+        const secondDelimiterPos = delimiters[1];
+        
+        // Find the space after the first delimiter to separate source and translation
+        const textAfterFirstDelimiter = normalizedText.slice(firstDelimiterPos! + 1);
+        const firstSpaceAfterDelimiter = textAfterFirstDelimiter.search(/\s/);
+        const sourceEndPos = firstDelimiterPos! + firstSpaceAfterDelimiter + 1;
+        
+        sourceText = normalizedText.slice(0, sourceEndPos).trim();
+        translationText = normalizedText.slice(sourceEndPos, secondDelimiterPos! + 1).trim();
+      } else {
+        // Case 2: Four or more delimiters total (two in source, two in translation, more extraneous)
+        const secondDelimiterPos = delimiters[1];
+        const fourthDelimiterPos = delimiters[3];
+        
+        sourceText = normalizedText.slice(0, secondDelimiterPos! + 1).trim();
+        translationText = normalizedText.slice(secondDelimiterPos! + 1, fourthDelimiterPos! + 1).trim();
+      }
     }
   } else {
     // Japanese text processing
@@ -118,6 +117,7 @@ export const separateTextPairs = (text: string, sourceLanguage: 'spa' | 'jpn'): 
       .replace(/【/g, '') // Remove 【 characters
       .replace(/】/g, '') // Remove 】 characters
       .replace(/\s+/g, ' ') // Normalize spaces
+      .replace(/^[^\n]*\n/, '') // Remove first line of text followed by newline
       .trim();
 
     // Find the last Japanese sentence by matching everything up to the last Japanese delimiter
@@ -126,7 +126,7 @@ export const separateTextPairs = (text: string, sourceLanguage: 'spa' | 'jpn'): 
 
     if (match) {
       // Strip spaces from the Japanese source text
-      const sourceText = match[1].replace(/\s+/g, '').trim();
+      sourceText = match[1].replace(/\s+/g, '').trim();
       
       // Get everything after the Japanese text for the translation
       const remainingText = normalizedText.slice(match[0].length).trim();
@@ -135,17 +135,26 @@ export const separateTextPairs = (text: string, sourceLanguage: 'spa' | 'jpn'): 
       const translationMatch = remainingText.match(/([^.!?]+[.!?])/);
       
       if (translationMatch) {
-        const translationText = translationMatch[1].trim();
-        return { sourceText, translationText };
+        translationText = translationMatch[1].trim();
       }
+
+      // Delete common OCR errors from beginning of Japanese source text
+      sourceText = sourceText
+        .replace(/^([ぁ-ん])?@/, '') // Remove optional leading hiragana + @ character
+        .replace(/^([ぁ-ん])?」/, '') // Remove leading hiragana + 」character
+        
     }
   }
-  
+
   // Fallback if we can't detect proper text pairs
-  return {
-    sourceText: '',
-    translationText: ''
-  };
+  if (!sourceText || !translationText) {
+    return {
+      sourceText: '',
+      translationText: ''
+    };
+  }
+
+  return { sourceText, translationText };
 };
 
 /**
