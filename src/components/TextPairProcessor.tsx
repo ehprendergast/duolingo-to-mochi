@@ -50,6 +50,14 @@ const TextPairProcessor: React.FC<TextPairProcessorProps> = ({
     setIsEditing(false);
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Check for Command+Enter (Mac) or Control+Enter (Windows/Linux)
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault(); // Prevent default behavior
+      handleSaveEdit();
+    }
+  };
+
   return (
     <div className="border rounded-lg overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow duration-200 mb-4">
       <div className="border-b px-4 py-3 bg-gray-50 flex justify-between items-center">
@@ -105,6 +113,7 @@ const TextPairProcessor: React.FC<TextPairProcessorProps> = ({
             <textarea
               value={editedSource}
               onChange={(e) => setEditedSource(e.target.value)}
+              onKeyDown={handleKeyDown}
               className="w-full p-3 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               rows={2}
             />
@@ -128,6 +137,7 @@ const TextPairProcessor: React.FC<TextPairProcessorProps> = ({
             <textarea
               value={editedTranslation}
               onChange={(e) => setEditedTranslation(e.target.value)}
+              onKeyDown={handleKeyDown}
               className="w-full p-3 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               rows={2}
             />
