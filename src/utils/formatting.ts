@@ -43,7 +43,6 @@ export const formatSourceWithSelections = (text: string, selections: string[]): 
 
     // Replace "| " with "I " to fix common OCR error
     formattedText = formattedText.replace(/\| /g, 'I ');
-
   }
   
   return formattedText;
@@ -83,7 +82,9 @@ export const separateTextPairs = (text: string, sourceLanguage: 'spa' | 'jpn'): 
 
   if (sourceLanguage === 'spa') {
     // Spanish text processing - keep multiple spaces
-    normalizedText = normalizedText.replace(/\s+/g, ' ');
+    normalizedText = normalizedText
+      .replace(/\s+/g, ' ')
+      .replace(/\| /g, 'I '); // Replace "| " with "I " to fix common OCR error
     
     // Find all delimiter positions
     const delimiters = [...normalizedText.matchAll(/[.!?]/g)].map(match => match.index);
