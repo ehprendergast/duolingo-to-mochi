@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ProcessedTextPair } from '../types';
 import SelectableText from './SelectableText';
-import ClickableWordText from './ClickableWordText';
 import { Trash2, Edit2, Check, X } from 'lucide-react';
 
 interface TextPairProcessorProps {
@@ -20,9 +19,6 @@ const TextPairProcessor: React.FC<TextPairProcessorProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [editedSource, setEditedSource] = useState(textPair.sourceText);
   const [editedTranslation, setEditedTranslation] = useState(textPair.translationText);
-
-  // Determine if this is Spanish (use clickable words) or Japanese (use selectable text)
-  const isSpanish = textPair.sourceLanguage === 'spa';
 
   // Update parent component when selections change
   useEffect(() => {
@@ -112,7 +108,7 @@ const TextPairProcessor: React.FC<TextPairProcessorProps> = ({
           <div className="flex items-center mb-2">
             <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-0.5 rounded">Source Text</span>
             <span className="text-xs text-gray-500 ml-2">
-              {isSpanish ? 'Click words to {{blank out}}' : 'Select words to {{blank out}}'}
+              {textPair.sourceLanguage === 'spa' ? 'Click words to {{blank out}}' : 'Select words to {{blank out}}'}
             </span>
           </div>
           {isEditing ? (
@@ -123,19 +119,13 @@ const TextPairProcessor: React.FC<TextPairProcessorProps> = ({
               className="w-full p-3 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               rows={2}
             />
-          ) : isSpanish ? (
-            <ClickableWordText 
-              text={textPair.sourceText} 
-              selections={sourceSelections}
-              onSelectionsChange={setSourceSelections}
-              isSource={true}
-            />
           ) : (
             <SelectableText 
               text={textPair.sourceText} 
               selections={sourceSelections}
               onSelectionsChange={setSourceSelections}
               isSource={true}
+              sourceLanguage={textPair.sourceLanguage}
             />
           )}
         </div>
@@ -145,7 +135,7 @@ const TextPairProcessor: React.FC<TextPairProcessorProps> = ({
           <div className="flex items-center mb-2">
             <span className="bg-orange-100 text-orange-800 text-xs font-medium px-2 py-0.5 rounded">Translation</span>
             <span className="text-xs text-gray-500 ml-2">
-              {isSpanish ? 'Click words to **bold**' : 'Select words to **bold**'}
+              {textPair.sourceLanguage === 'spa' ? 'Click words to **bold**' : 'Select words to **bold**'}
             </span>
           </div>
           {isEditing ? (
@@ -156,19 +146,13 @@ const TextPairProcessor: React.FC<TextPairProcessorProps> = ({
               className="w-full p-3 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               rows={2}
             />
-          ) : isSpanish ? (
-            <ClickableWordText 
-              text={textPair.translationText} 
-              selections={translationSelections}
-              onSelectionsChange={setTranslationSelections}
-              isSource={false}
-            />
           ) : (
             <SelectableText 
               text={textPair.translationText} 
               selections={translationSelections}
               onSelectionsChange={setTranslationSelections}
               isSource={false}
+              sourceLanguage={textPair.sourceLanguage}
             />
           )}
         </div>

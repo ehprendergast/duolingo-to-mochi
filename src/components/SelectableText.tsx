@@ -5,6 +5,7 @@ interface SelectableTextProps {
   selections: string[];
   onSelectionsChange: (selections: string[]) => void;
   isSource: boolean;
+  sourceLanguage?: 'spa' | 'jpn';
 }
 
 const SelectableText: React.FC<SelectableTextProps> = ({
@@ -12,12 +13,15 @@ const SelectableText: React.FC<SelectableTextProps> = ({
   selections,
   onSelectionsChange,
   isSource,
+  sourceLanguage = 'spa',
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [selectedText, setSelectedText] = useState<string>('');
 
-  // Handle selection change
+  // Handle selection change for Japanese (slide-to-select)
   const handleMouseUp = () => {
+    if (sourceLanguage === 'spa') return; // Don't handle mouse selection for Spanish
+    
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed) return;
 
@@ -27,7 +31,7 @@ const SelectableText: React.FC<SelectableTextProps> = ({
     }
   };
 
-  // Add or remove selection
+  // Add or remove selection for Japanese (slide-to-select)
   const handleAddSelection = () => {
     if (!selectedText) return;
     
@@ -54,8 +58,66 @@ const SelectableText: React.FC<SelectableTextProps> = ({
     window.getSelection()?.removeAllRanges();
   };
 
-  // Highlight the selected text in the display
-  const getHighlightedText = () => {
+  // Handle word click for Spanish (click-to-select)
+  const handleWordClick = (word: string, wordIndex: number) => {
+    if (sourceLanguage !== 'spa') return; // Only handle word clicks for Spanish
+    
+    // Create a unique identifier for this specific word instance
+    const wordId = `${word}_${wordIndex}`;
+    
+    // Check if this specific word instance is already selected
+    const isSelected = selections.some(sel => sel === wordId);
+    
+    if (isSelected) {
+      // Remove this specific word instance
+      onSelectionsChange(selections.filter(sel => sel !== wordId));
+    } else {
+      // Add this specific word instance
+      onSelectionsChange([...selections, wordId]);
+    }
+  };
+
+  // Split text into words for Spanish interface
+  const getWordsForSpanish = () => {
+    if (!text) return [];
+    
+    // Split by spaces but preserve punctuation with words
+    const words = text.split(/(\s+)/).filter(part => part.trim().length > 0);
+    return words;
+  };
+
+  // Render Spanish interface with clickable word buttons
+  const renderSpanishInterface = () => {
+    const words = getWordsForSpanish();
+    
+    return (
+      <div className={`py-3 px-4 rounded-md ${isSource ? 'bg-blue-50 font-medium' : 'bg-gray-50'} flex flex-wrap gap-1`}>
+        {words.map((word, index) => {
+          const wordId = `${word}_${index}`;
+          const isSelected = selections.some(sel => sel === wordId);
+          
+          return (
+            <button
+              key={`${word}-${index}`}
+              onClick={() => handleWordClick(word, index)}
+              className={`px-2 py-1 rounded transition-all duration-200 ${
+                isSelected
+                  ? isSource
+                    ? 'bg-blue-200 text-blue-900 border border-blue-300 shadow-sm'
+                    : 'bg-orange-200 text-orange-900 border border-orange-300 shadow-sm'
+                  : 'hover:bg-gray-200 border border-transparent'
+              }`}
+            >
+              {isSelected && isSource ? `{{${word}}}` : isSelected && !isSource ? `**${word}**` : word}
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // Highlight the selected text in the display for Japanese
+  const getHighlightedTextForJapanese = () => {
     if (!text) return null;
     
     // Create a copy of the text to work with
@@ -108,30 +170,39 @@ const SelectableText: React.FC<SelectableTextProps> = ({
     return resultJSX;
   };
 
+  // Render Japanese interface with slide-to-select
+  const renderJapaneseInterface = () => {
+    return (
+      <>
+        <div 
+          ref={containerRef}
+          className={`py-3 px-4 rounded-md ${
+            isSource ? 'bg-blue-50 font-medium' : 'bg-gray-50'
+          }`}
+          onMouseUp={handleMouseUp}
+        >
+          {getHighlightedTextForJapanese()}
+        </div>
+        
+        {selectedText && (
+          <div className="absolute right-2 bottom-2 flex space-x-2">
+            <button
+              onClick={handleAddSelection}
+              className={`text-white py-1 px-3 rounded-md text-sm ${
+                isSource ? 'bg-blue-500 hover:bg-blue-600' : 'bg-orange-500 hover:bg-orange-600'
+              }`}
+            >
+              {selections.includes(selectedText) ? 'Remove' : 'Select'} "{selectedText}"
+            </button>
+          </div>
+        )}
+      </>
+    );
+  };
+
   return (
     <div className="relative">
-      <div 
-        ref={containerRef}
-        className={`py-3 px-4 rounded-md ${
-          isSource ? 'bg-blue-50 font-medium' : 'bg-gray-50'
-        }`}
-        onMouseUp={handleMouseUp}
-      >
-        {getHighlightedText()}
-      </div>
-      
-      {selectedText && (
-        <div className="absolute right-2 bottom-2 flex space-x-2">
-          <button
-            onClick={handleAddSelection}
-            className={`text-white py-1 px-3 rounded-md text-sm ${
-              isSource ? 'bg-blue-500 hover:bg-blue-600' : 'bg-orange-500 hover:bg-orange-600'
-            }`}
-          >
-            {selections.includes(selectedText) ? 'Remove' : 'Select'} "{selectedText}"
-          </button>
-        </div>
-      )}
+      {sourceLanguage === 'spa' ? renderSpanishInterface() : renderJapaneseInterface()}
     </div>
   );
 };

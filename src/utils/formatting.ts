@@ -9,10 +9,11 @@ export const formatTextPairs = (pairs: ProcessedTextPair[]): string => {
   
   return pairs
     .map((pair, index) => {
-      const formattedSource = formatSourceWithSelections(pair.sourceText, pair.sourceSelections);
+      const formattedSource = formatSourceWithSelections(pair.sourceText, pair.sourceSelections, pair.sourceLanguage);
       const formattedTranslation = formatTranslationWithSelections(
         pair.translationText,
-        pair.translationSelections
+        pair.translationSelections,
+        pair.sourceLanguage
       );
       
       const pairText = `# ${formattedSource}\n${formattedTranslation}`;
@@ -26,24 +27,49 @@ export const formatTextPairs = (pairs: ProcessedTextPair[]): string => {
 /**
  * Format source text with selections wrapped in {{}}
  */
-export const formatSourceWithSelections = (text: string, selections: string[]): string => {
+export const formatSourceWithSelections = (text: string, selections: string[], sourceLanguage: 'spa' | 'jpn'): string => {
   if (!selections.length) return text;
   
   let formattedText = text;
-  // Sort selections by length (descending) to handle overlapping selections properly
-  const sortedSelections = [...selections].sort((a, b) => b.length - a.length);
   
-  for (const selection of sortedSelections) {
-    // Escape special regex characters in the selection
-    const escapedSelection = selection.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    formattedText = formattedText.replace(
-      new RegExp(escapedSelection, 'g'),
-      `{{${selection}}}`
-    );
-
-    // Replace "| " with "I " to fix common OCR error
-    formattedText = formattedText.replace(/\| /g, 'I ');
+  if (sourceLanguage === 'spa') {
+    // For Spanish: Handle word-based selections with unique identifiers
+    const words = text.split(/(\s+)/).filter(part => part.trim().length > 0);
+    
+    // Create a map of selected word positions
+    const selectedPositions = new Set<number>();
+    selections.forEach(selection => {
+      const [word, indexStr] = selection.split('_');
+      const index = parseInt(indexStr, 10);
+      if (!isNaN(index)) {
+        selectedPositions.add(index);
+      }
+    });
+    
+    // Rebuild the text with selected words wrapped
+    formattedText = words.map((word, index) => {
+      if (selectedPositions.has(index)) {
+        return `{{${word}}}`;
+      }
+      return word;
+    }).join(' ');
+  } else {
+    // For Japanese: Handle phrase-based selections (existing logic)
+    // Sort selections by length (descending) to handle overlapping selections properly
+    const sortedSelections = [...selections].sort((a, b) => b.length - a.length);
+    
+    for (const selection of sortedSelections) {
+      // Escape special regex characters in the selection
+      const escapedSelection = selection.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      formattedText = formattedText.replace(
+        new RegExp(escapedSelection, 'g'),
+        `{{${selection}}}`
+      );
+    }
   }
+
+  // Replace "| " with "I " to fix common OCR error
+  formattedText = formattedText.replace(/\| /g, 'I ');
   
   return formattedText;
 };
@@ -51,20 +77,45 @@ export const formatSourceWithSelections = (text: string, selections: string[]): 
 /**
  * Format translation text with selections bolded
  */
-export const formatTranslationWithSelections = (text: string, selections: string[]): string => {
+export const formatTranslationWithSelections = (text: string, selections: string[], sourceLanguage: 'spa' | 'jpn'): string => {
   if (!selections.length) return text;
   
   let formattedText = text;
-  // Sort selections by length (descending) to handle overlapping selections properly
-  const sortedSelections = [...selections].sort((a, b) => b.length - a.length);
   
-  for (const selection of sortedSelections) {
-    // Escape special regex characters in the selection
-    const escapedSelection = selection.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    formattedText = formattedText.replace(
-      new RegExp(escapedSelection, 'g'),
-      `**${selection}**`
-    );
+  if (sourceLanguage === 'spa') {
+    // For Spanish: Handle word-based selections with unique identifiers
+    const words = text.split(/(\s+)/).filter(part => part.trim().length > 0);
+    
+    // Create a map of selected word positions
+    const selectedPositions = new Set<number>();
+    selections.forEach(selection => {
+      const [word, indexStr] = selection.split('_');
+      const index = parseInt(indexStr, 10);
+      if (!isNaN(index)) {
+        selectedPositions.add(index);
+      }
+    });
+    
+    // Rebuild the text with selected words bolded
+    formattedText = words.map((word, index) => {
+      if (selectedPositions.has(index)) {
+        return `**${word}**`;
+      }
+      return word;
+    }).join(' ');
+  } else {
+    // For Japanese: Handle phrase-based selections (existing logic)
+    // Sort selections by length (descending) to handle overlapping selections properly
+    const sortedSelections = [...selections].sort((a, b) => b.length - a.length);
+    
+    for (const selection of sortedSelections) {
+      // Escape special regex characters in the selection
+      const escapedSelection = selection.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      formattedText = formattedText.replace(
+        new RegExp(escapedSelection, 'g'),
+        `**${selection}**`
+      );
+    }
   }
   
   return formattedText;
