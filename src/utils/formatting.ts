@@ -74,13 +74,13 @@ export const formatTranslationWithSelections = (text: string, selections: string
  * Separates the OCR text into source and translation parts based on delimiter punctuation
  */
 export const separateTextPairs = (text: string, sourceLanguage: 'spa' | 'jpn'): { sourceText: string; translationText: string } => {
-  // Remove line breaks and extra spaces
-  let normalizedText = text.replace(/\n/g, ' ').trim();
   
   let sourceText = '';
   let translationText = '';
 
   if (sourceLanguage === 'spa') {
+    // Remove line breaks and extra spaces
+    let normalizedText = text.replace(/\n/g, ' ').trim();
     // Spanish text processing - keep multiple spaces
     normalizedText = normalizedText
       .replace(/\s+/g, ' ')
@@ -112,14 +112,28 @@ export const separateTextPairs = (text: string, sourceLanguage: 'spa' | 'jpn'): 
       }
     }
   } else {
+    let normalizedText = text.trim();
     // Japanese text processing
     // First, clean up the text by removing unnecessary characters and spaces
+    console.log('1. Before Japanese processing:', JSON.stringify(normalizedText));
+    console.log('1a. Contains \\n\\n at start?', /^[^\n]*\n\n/.test(normalizedText));
+    console.log('1b. Text split by newlines:', normalizedText.split('\n').map((line, i) => `Line ${i}: "${line}"`));
+    // First remove the first line followed by double newlines (before normalizing spaces)
+    const beforeRemoval = normalizedText;
+    normalizedText = normalizedText.replace(/^[^\n]*\n\n/, '');
+    console.log('2a. Regex match test:', beforeRemoval.match(/^[^\n]*\n\n/));
+    console.log('2b. After removing first line + \\n\\n:', JSON.stringify(normalizedText));
+    
+    // Then clean up the remaining text
     normalizedText = normalizedText
       .replace(/【/g, '') // Remove 【 characters
       .replace(/】/g, '') // Remove 】 characters
       .replace(/\s+/g, ' ') // Normalize spaces
-      .replace(/^[^\n]*\n/, '') // Remove first line of text followed by newline
       .trim();
+    console.log('2c. After removing 【】 and normalizing spaces:', JSON.stringify(normalizedText));
+    console.log('2. After Japanese processing:', JSON.stringify(normalizedText));
+    // Remove line breaks and extra spaces
+    normalizedText = normalizedText.replace(/\n/g, ' ').trim();
 
     // Find the last Japanese sentence by matching everything up to the last Japanese delimiter
     const japanesePattern = /^.*?([^。！？]+[。！？])/;
