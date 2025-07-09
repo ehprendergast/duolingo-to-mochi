@@ -187,12 +187,15 @@ export const separateTextPairs = (text: string, sourceLanguage: 'spa' | 'jpn'): 
     normalizedText = normalizedText.replace(/\n/g, ' ').trim();
 
     // Find the last Japanese sentence by matching everything up to the last Japanese delimiter
-    const japanesePattern = /^.*?([^。！？]+[。！？])/;
+    const japanesePattern = /^.*?([^。！？!?]+[。！？!?])/;
     const match = normalizedText.match(japanesePattern);
 
     if (match) {
-      // Strip spaces from the Japanese source text
-      sourceText = match[1].replace(/\s+/g, '').trim();
+      sourceText = match[1]
+        .replace(/!/g, '！') // Replace Western exclamation mark with Japanese
+        .replace(/\?/g, '？') // Replace Western question mark with Japanese
+        .replace(/\s+/g, '') // Strip spaces from the Japanese source text
+        .trim();
       
       // Get everything after the Japanese text for the translation
       const remainingText = normalizedText.slice(match[0].length).trim();
@@ -201,7 +204,13 @@ export const separateTextPairs = (text: string, sourceLanguage: 'spa' | 'jpn'): 
       const translationMatch = remainingText.match(/([^.!?]+[.!?])/);
       
       if (translationMatch) {
-        translationText = translationMatch[1].trim();
+        translationText = translationMatch[1]
+          .replace(/^l/, 'I ')
+          .replace(/^1/, 'I ')
+          .replace(/^I s/, 'Is')
+          .replace(/^I m/, "I'm")
+          .replace(/^I n/, 'In')
+          .trim();
       }
 
       // Delete common OCR errors from beginning of Japanese source text
