@@ -2,7 +2,7 @@ import { ProcessedTextPair } from '../types';
 
 /**
  * Formats text pairs according to the required format
- * Adds "# " prefix and separates pairs with ---
+ * Adds "# " prefix and separates pairs with -----
  */
 export const formatTextPairs = (pairs: ProcessedTextPair[]): string => {
   if (pairs.length === 0) return '';
@@ -69,7 +69,9 @@ export const formatSourceWithSelections = (text: string, selections: string[], s
   }
 
   // Replace "| " with "I " to fix common OCR error
-  formattedText = formattedText.replace(/\| /g, 'I ');
+  formattedText = formattedText
+    .replace(/\| /g, 'I ')
+    .trim();
   
   return formattedText;
 };
@@ -161,19 +163,15 @@ export const separateTextPairs = (text: string, sourceLanguage: 'spa' | 'jpn'): 
         sourceText = normalizedText.slice(0, secondDelimiterPos! + 1).trim();
         translationText = normalizedText.slice(secondDelimiterPos! + 1, fourthDelimiterPos! + 1).trim();
       }
-    }
+    } 
   } else {
     let normalizedText = text.trim();
     // Japanese text processing
     // First, clean up the text by removing unnecessary characters and spaces
-    console.log('1. Before Japanese processing:', JSON.stringify(normalizedText));
-    console.log('1a. Contains \\n\\n at start?', /^[^\n]*\n\n/.test(normalizedText));
-    console.log('1b. Text split by newlines:', normalizedText.split('\n').map((line, i) => `Line ${i}: "${line}"`));
+    
     // First remove the first line followed by double newlines (before normalizing spaces)
     const beforeRemoval = normalizedText;
     normalizedText = normalizedText.replace(/^[^\n]*\n\n/, '');
-    console.log('2a. Regex match test:', beforeRemoval.match(/^[^\n]*\n\n/));
-    console.log('2b. After removing first line + \\n\\n:', JSON.stringify(normalizedText));
     
     // Then clean up the remaining text
     normalizedText = normalizedText
@@ -221,13 +219,81 @@ export const separateTextPairs = (text: string, sourceLanguage: 'spa' | 'jpn'): 
     }
   }
 
-  // Fallback if we can't detect proper text pairs
-  if (!sourceText || !translationText) {
-    return {
-      sourceText: '',
-      translationText: ''
-    };
-  }
+  // Remove common OCR errors from translation text with contractions in English
+  translationText = translationText
+  .replace(/I\s?m\s/g, "I'm ")
+  .replace(/I\s?ll\s/g, "I'll ")
+  .replace(/I\s?ve\s/g, "I've ")
+  .replace(/I\s?d\s/g, "I'd ")
+  .replace(/(?<!\.)\sL/g, ' l') // Correct problems with capitalized 'Love' in middle of sentence
+  .replace(/You\s?re\s/g, "You're ")
+  .replace(/You\s?ve\s/g, "You've ")
+  .replace(/You\s?ll\s/g, "You'll")
+  .replace(/You\s?d\s/g, "You'd ")
+  .replace(/\syou\s?re\s/g, " you're ")
+  .replace(/\syou\s?ve\s/g, " you've ")
+  .replace(/\syou\s?ll\s/g, " you'll ")
+  .replace(/\syou\s?d\s/g, " you'd ")
+  .replace(/He\s?s\s/g, "He's ")
+  .replace(/He\s?d\s/g, "He'd ")
+  .replace(/He\s?ll\s/g, "He'll ")
+  .replace(/\she\s?s\s/g, " he's ")
+  .replace(/\she\s?d\s/g, " he'd ")
+  .replace(/\she\s?ll\s/g, " he'll ")
+  .replace(/She\s?s\s/g, "She's ")
+  .replace(/She\s?d\s/g, "She'd ")
+  .replace(/She\s?ll\s/g, "She'll ")
+  .replace(/\sshe\s?s\s/g, " she's ")
+  .replace(/\sshe\s?d\s/g, " she'd ")
+  .replace(/\sshe\s?ll\s/g, " she'll ")
+  .replace(/It\s?s\s/g, "It's ")
+  .replace(/It\s?ll\s/g, "It'll ")
+  .replace(/\sit\s?ll\s/g, " it'll ")
+  .replace(/They\s?re\s/g, "They're ")
+  .replace(/They\s?ve\s/g, "They've ")
+  .replace(/They\s?ll\s/g, "They'll ")
+  .replace(/They\s?d\s/g, "They'd ")
+  .replace(/\sthey\s?re\s/g, " they're ")
+  .replace(/\sthey\s?ve\s/g, " they've ")
+  .replace(/\sthey\s?ll\s/g, " they'll ")
+  .replace(/\sthey\s?d\s/g, " they'd ")
+  .replace(/We\sre\s/g, "We're ")
+  .replace(/We\s?ve\s/g, "We've ")
+  .replace(/We\s?ll\s/g, "We'll ")
+  .replace(/We\s?d\s/g, "We'd ")
+  .replace(/\swe\sre\s/g, " we're ")
+  .replace(/\swe\s?ve\s/g, " we've ")
+  .replace(/\swe\s?ll\s/g, " we'll ")
+  .replace(/\swe\s?d\s/g, " we'd ")
+  .replace(/Isn\s?t\s/g, "Isn't ")
+  .replace(/\sisn\s?t\s/g, " isn't ")
+  .replace(/Are\s?nt\s/g, "Aren't ")
+  .replace(/\sare\s?nt\s/g, " aren't ")
+  .replace(/Was\s?n't\s/g, "Wasn't ")
+  .replace(/\swas\s?n't\s/g, " wasn't ")
+  .replace(/Were\s?n't\s/g, "Weren't ")
+  .replace(/\swere\s?n't\s/g, " weren't ")
+  .replace(/Haven\s?t\s/g, "Haven't ")
+  .replace(/\shaven\s?t\s/g, " haven't ")
+  .replace(/Had\s?n't\s/g, "Hadn't ")
+  .replace(/\shad\s?n't\s/g, " hadn't ")
+  .replace(/Won\s?t\s/g, "Won't ")
+  .replace(/\swon\s?t\s/g, " won't ")
+  .replace(/Wouldn\s?t\s/g, "Wouldn't ")
+  .replace(/\swouldn\s?t\s/g, " wouldn't ")
+  .replace(/Can\s?t\s/g, "Can't ")
+  .replace(/\scan\s?t\s/g, " can't ")
+  .replace(/Don\s?t\s/g, "Don't ")
+  .replace(/\sdon\s?t\s/g, " don't ")
+  .replace(/Does\s?n't\s/g, "Doesn't ")
+  .replace(/\sdoes\s?n't\s/g, " doesn't ")
+  .replace(/Did\s?n't\s/g, "Didn't ")
+  .replace(/\sdid\s?n't\s/g, " didn't ")
+  .replace(/Could\s?n't\s/g, "Couldn't ")
+  .replace(/\scouldn\s?t\s/g, " couldn't ")
+  .replace(/Should\s?n't\s/g, "Shouldn't ")
+  .replace(/\sshould\s?n't\s/g, " shouldn't ")
+  .trim();
 
   return { sourceText, translationText };
 };
