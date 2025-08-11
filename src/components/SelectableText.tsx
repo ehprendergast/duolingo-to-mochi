@@ -17,9 +17,12 @@ const SelectableText: React.FC<SelectableTextProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [selectedText, setSelectedText] = useState<string>('');
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [selectionStart, setSelectionStart] = useState<number | null>(null);
+  const [selectionEnd, setSelectionEnd] = useState<number | null>(null);
 
-  // Handle selection change for Japanese (slide-to-select)
-  const handleMouseUp = () => {
+  // Handle text selection for Japanese (works on both desktop and mobile)
+  const handleSelectionEnd = () => {
     if (sourceLanguage === 'spa') return; // Don't handle mouse selection for Spanish
     
     const selection = window.getSelection();
@@ -29,6 +32,31 @@ const SelectableText: React.FC<SelectableTextProps> = ({
     if (selText && selText.length > 0) {
       setSelectedText(selText);
     }
+    setIsSelecting(false);
+  };
+
+  // Mobile touch handlers for Japanese
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (sourceLanguage === 'spa') return;
+    setIsSelecting(true);
+    setSelectedText('');
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (sourceLanguage === 'spa') return;
+    setTimeout(() => handleSelectionEnd(), 100); // Small delay to ensure selection is complete
+  };
+
+  // Desktop mouse handlers for Japanese
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (sourceLanguage === 'spa') return;
+    setIsSelecting(true);
+    setSelectedText('');
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    if (sourceLanguage === 'spa') return;
+    handleSelectionEnd();
   };
 
   // Add or remove selection for Japanese (slide-to-select)
@@ -178,21 +206,43 @@ const SelectableText: React.FC<SelectableTextProps> = ({
           ref={containerRef}
           className={`py-3 px-4 rounded-md ${
             isSource ? 'bg-blue-50 font-medium' : 'bg-gray-50'
-          }`}
+          } select-text cursor-text`}
+          onMouseDown={handleMouseDown}
           onMouseUp={handleMouseUp}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          style={{
+            WebkitUserSelect: 'text',
+            MozUserSelect: 'text',
+            msUserSelect: 'text',
+            userSelect: 'text',
+            WebkitTouchCallout: 'default',
+            WebkitTapHighlightColor: 'rgba(0,0,0,0.1)'
+          }}
         >
           {getHighlightedTextForJapanese()}
         </div>
         
         {selectedText && (
-          <div className="absolute right-2 bottom-2 flex space-x-2">
+          <div className="mt-2 flex justify-center space-x-2">
             <button
               onClick={handleAddSelection}
-              className={`text-white py-1 px-3 rounded-md text-sm ${
+              className={`text-white py-2 px-4 rounded-md text-sm font-medium shadow-md transition-all duration-200 ${
                 isSource ? 'bg-blue-500 hover:bg-blue-600' : 'bg-orange-500 hover:bg-orange-600'
-              }`}
+              } active:scale-95`}
+              style={{ minHeight: '44px' }} // iOS minimum touch target size
             >
               {selections.includes(selectedText) ? 'Remove' : 'Select'} "{selectedText}"
+            </button>
+            <button
+              onClick={() => {
+                setSelectedText('');
+                window.getSelection()?.removeAllRanges();
+              }}
+              className="bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded-md text-sm font-medium shadow-md transition-all duration-200 active:scale-95"
+              style={{ minHeight: '44px' }}
+            >
+              Clear
             </button>
           </div>
         )}
