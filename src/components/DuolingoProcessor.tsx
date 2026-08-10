@@ -151,13 +151,13 @@ const DuolingoProcessor: React.FC = () => {
             </select>
             
             {currentProfile.supportsFurigana && (
-              <span className="hidden sm:flex items-center gap-1 text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded-full border border-purple-200">
+              <span className="flex items-center gap-1 text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded-full border border-purple-200">
                 <Sparkles size={12} />
                 Furigana
               </span>
             )}
             {useCloudOCR && (
-              <span className="hidden sm:flex items-center gap-1 text-xs bg-green-50 text-green-700 px-2 py-1 rounded-full border border-green-200">
+              <span className="flex items-center gap-1 text-xs bg-green-50 text-green-700 px-2 py-1 rounded-full border border-green-200">
                 <Zap size={12} />
                 Cloud OCR
               </span>
