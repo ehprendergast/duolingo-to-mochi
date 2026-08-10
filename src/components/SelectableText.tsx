@@ -1,11 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import JapaneseTokenSelector from './JapaneseTokenSelector';
+import { Token } from '../services/japaneseTokenizer';
+import { tokenizeWithIntl } from '../services/japaneseTokenizer';
+import { containsKanji } from '../utils/kana';
 
 interface SelectableTextProps {
   text: string;
   selections: string[];
   onSelectionsChange: (selections: string[]) => void;
   isSource: boolean;
-  sourceLanguage?: 'spa' | 'jpn';
+  sourceLanguage?: string; // now supports 'spa' | 'jpn' | 'zho' | etc
+  onTokensChange?: (tokens: Token[]) => void;
 }
 
 const SelectableText: React.FC<SelectableTextProps> = ({
@@ -14,245 +19,192 @@ const SelectableText: React.FC<SelectableTextProps> = ({
   onSelectionsChange,
   isSource,
   sourceLanguage = 'spa',
+  onTokensChange,
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [selectedText, setSelectedText] = useState<string>('');
-  const [isSelecting, setIsSelecting] = useState(false);
-  const [selectionStart, setSelectionStart] = useState<number | null>(null);
-  const [selectionEnd, setSelectionEnd] = useState<number | null>(null);
+  const isJapanese = sourceLanguage === 'jpn';
+  const isChinese = sourceLanguage === 'zho';
+  const isUnspaced = isJapanese || isChinese || sourceLanguage === 'tha';
 
-  // Handle text selection for Japanese (works on both desktop and mobile)
-  const handleSelectionEnd = () => {
-    if (sourceLanguage === 'spa') return; // Don't handle mouse selection for Spanish
-    
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed) return;
+  // For Japanese/Chinese, delegate to token selector
+  if (isJapanese) {
+    return (
+      <JapaneseTokenSelector
+        text={text}
+        selections={selections}
+        onSelectionsChange={onSelectionsChange}
+        isSource={isSource}
+        autoFurigana={true}
+        onTokensChange={onTokensChange}
+      />
+    );
+  }
 
-    const selText = selection.toString().trim();
-    if (selText && selText.length > 0) {
-      setSelectedText(selText);
-    }
-    setIsSelecting(false);
+  if (isUnspaced) {
+    return (
+      <UnspacedTokenSelector
+        text={text}
+        language={sourceLanguage}
+        selections={selections}
+        onSelectionsChange={onSelectionsChange}
+        isSource={isSource}
+        onTokensChange={onTokensChange}
+      />
+    );
+  }
+
+  // Spaced languages — improved click selector (Spanish, French, German, etc)
+  return (
+    <SpacedTokenSelector
+      text={text}
+      selections={selections}
+      onSelectionsChange={onSelectionsChange}
+      isSource={isSource}
+    />
+  );
+};
+
+// Component for spaced languages like Spanish — now with better mobile UX
+const SpacedTokenSelector: React.FC<{
+  text: string;
+  selections: string[];
+  onSelectionsChange: (selections: string[]) => void;
+  isSource: boolean;
+}> = ({ text, selections, onSelectionsChange, isSource }) => {
+  const selectedSet = useMemo(() => new Set(selections), [selections]);
+
+  // Split preserving punctuation but also making punctuation non-selectable for better UX
+  const getTokens = () => {
+    if (!text) return [];
+    // Match words including apostrophes, or punctuation as separate
+    const matches = text.match(/[\p{L}\p{N}\p{M}’']+|[^\s\p{L}\p{N}]+|\s+/gu) || [text];
+    return matches.filter(m => m.trim().length > 0);
   };
 
-  // Mobile touch handlers for Japanese
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (sourceLanguage === 'spa') return;
-    setIsSelecting(true);
-    setSelectedText('');
-  };
+  const words = getTokens();
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (sourceLanguage === 'spa') return;
-    setTimeout(() => handleSelectionEnd(), 100); // Small delay to ensure selection is complete
-  };
-
-  // Desktop mouse handlers for Japanese
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (sourceLanguage === 'spa') return;
-    setIsSelecting(true);
-    setSelectedText('');
-  };
-
-  const handleMouseUp = (e: React.MouseEvent) => {
-    if (sourceLanguage === 'spa') return;
-    handleSelectionEnd();
-  };
-
-  // Add or remove selection for Japanese (slide-to-select)
-  const handleAddSelection = () => {
-    if (!selectedText) return;
-    
-    // Multi-word selection
-    if (selectedText.includes(' ')) {
-      // Check if this exact phrase is already selected
-      if (selections.includes(selectedText)) {
-        onSelectionsChange(selections.filter(s => s !== selectedText));
-      } else {
-        onSelectionsChange([...selections, selectedText]);
-      }
+  const toggleWord = (word: string, index: number) => {
+    const wordId = `${word}_${index}`;
+    if (selectedSet.has(wordId)) {
+      onSelectionsChange(selections.filter(s => s !== wordId));
     } else {
-      // Single word selection
-      if (selections.includes(selectedText)) {
-        onSelectionsChange(selections.filter(s => s !== selectedText));
-      } else {
-        onSelectionsChange([...selections, selectedText]);
-      }
-    }
-    
-    setSelectedText('');
-    
-    // Clear the selection
-    window.getSelection()?.removeAllRanges();
-  };
-
-  // Handle word click for Spanish (click-to-select)
-  const handleWordClick = (word: string, wordIndex: number) => {
-    if (sourceLanguage !== 'spa') return; // Only handle word clicks for Spanish
-    
-    // Create a unique identifier for this specific word instance
-    const wordId = `${word}_${wordIndex}`;
-    
-    // Check if this specific word instance is already selected
-    const isSelected = selections.some(sel => sel === wordId);
-    
-    if (isSelected) {
-      // Remove this specific word instance
-      onSelectionsChange(selections.filter(sel => sel !== wordId));
-    } else {
-      // Add this specific word instance
       onSelectionsChange([...selections, wordId]);
     }
   };
 
-  // Split text into words for Spanish interface
-  const getWordsForSpanish = () => {
-    if (!text) return [];
-    
-    // Split by spaces but preserve punctuation with words
-    const words = text.split(/(\s+)/).filter(part => part.trim().length > 0);
-    return words;
+  const isPunctuation = (w: string) => /^[^\p{L}\p{N}]+$/u.test(w);
+
+  return (
+    <div
+      className={`py-3 px-3 rounded-md border flex flex-wrap gap-2 ${
+        isSource ? 'bg-blue-50/50 border-blue-100' : 'bg-orange-50/50 border-orange-100'
+      }`}
+    >
+      {words.map((word, index) => {
+        const wordId = `${word}_${index}`;
+        const isSelected = selectedSet.has(wordId);
+        const punct = isPunctuation(word);
+
+        if (punct) {
+          return (
+            <span key={`${word}-${index}`} className="px-1 py-2 text-gray-400 text-[15px]">
+              {word}
+            </span>
+          );
+        }
+
+        return (
+          <button
+            key={`${word}-${index}`}
+            onClick={() => toggleWord(word, index)}
+            className={`px-3 py-2 rounded-lg text-[15px] transition-all duration-150 border active:scale-95 select-none min-h-[44px] ${
+              isSelected
+                ? isSource
+                  ? 'bg-blue-500 text-white border-blue-600 shadow-md font-medium'
+                  : 'bg-orange-500 text-white border-orange-600 shadow-md font-bold'
+                : 'bg-white hover:bg-gray-100 text-gray-800 border-gray-200 hover:border-gray-300 hover:shadow-sm'
+            }`}
+            style={{ WebkitTapHighlightColor: 'transparent' }}
+          >
+            {isSelected && isSource ? `{{${word}}}` : isSelected && !isSource ? `**${word}**` : word}
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
+// Generic unspaced language selector (Chinese, Thai, etc)
+const UnspacedTokenSelector: React.FC<{
+  text: string;
+  language: string;
+  selections: string[];
+  onSelectionsChange: (selections: string[]) => void;
+  isSource: boolean;
+  onTokensChange?: (tokens: Token[]) => void;
+}> = ({ text, language, selections, onSelectionsChange, isSource, onTokensChange }) => {
+  const localeMap: Record<string, string> = {
+    zho: 'zh',
+    jpn: 'ja',
+    tha: 'th',
+    kor: 'ko',
+  };
+  const locale = localeMap[language] || 'en';
+
+  const [tokens, setTokens] = useState<Token[]>(() => tokenizeWithIntl(text, locale));
+
+  useEffect(() => {
+    const newTokens = tokenizeWithIntl(text, locale);
+    setTokens(newTokens);
+    onTokensChange?.(newTokens);
+  }, [text, locale]);
+
+  const selectedSet = useMemo(() => new Set(selections), [selections]);
+
+  const toggleToken = (token: Token) => {
+    const id = `${token.surface}_${token.index}`;
+    if (selectedSet.has(id)) {
+      onSelectionsChange(selections.filter(s => s !== id));
+    } else {
+      onSelectionsChange([...selections, id]);
+    }
   };
 
-  // Render Spanish interface with clickable word buttons
-  const renderSpanishInterface = () => {
-    const words = getWordsForSpanish();
-    
-    return (
-      <div className={`py-3 px-4 rounded-md ${isSource ? 'bg-blue-50 font-medium' : 'bg-gray-50'} flex flex-wrap gap-1`}>
-        {words.map((word, index) => {
-          const wordId = `${word}_${index}`;
-          const isSelected = selections.some(sel => sel === wordId);
-          
+  const isSelected = (token: Token) => selectedSet.has(`${token.surface}_${token.index}`);
+
+  return (
+    <div className="space-y-2">
+      <div
+        className={`py-3 px-3 rounded-md border flex flex-wrap gap-2 ${
+          isSource ? 'bg-blue-50/50 border-blue-100' : 'bg-orange-50/50 border-orange-100'
+        }`}
+      >
+        {tokens.map(token => {
+          const selected = isSelected(token);
+          const hasKanji = token.containsKanji || containsKanji(token.surface);
+
           return (
             <button
-              key={`${word}-${index}`}
-              onClick={() => handleWordClick(word, index)}
-              className={`px-2 py-1 rounded transition-all duration-200 ${
-                isSelected
+              key={`${token.surface}-${token.index}`}
+              onClick={() => !token.isPunctuation && toggleToken(token)}
+              disabled={token.isPunctuation}
+              className={`px-3 py-2 rounded-lg text-[15px] transition-all duration-150 border active:scale-95 select-none min-h-[44px] ${
+                token.isPunctuation
+                  ? 'bg-transparent border-transparent text-gray-400 px-1 cursor-default'
+                  : selected
                   ? isSource
-                    ? 'bg-blue-200 text-blue-900 border border-blue-300 shadow-sm'
-                    : 'bg-orange-200 text-orange-900 border border-orange-300 shadow-sm'
-                  : 'hover:bg-gray-200 border border-transparent'
+                    ? 'bg-blue-500 text-white border-blue-600 shadow-md font-medium'
+                    : 'bg-orange-500 text-white border-orange-600 shadow-md font-bold'
+                  : hasKanji || token.isContentWord
+                  ? 'bg-white hover:bg-blue-50 text-gray-800 border-gray-200 hover:border-blue-200'
+                  : 'bg-gray-50 hover:bg-gray-100 text-gray-600 border-gray-200 text-[13px]'
               }`}
+              style={{ WebkitTapHighlightColor: 'transparent' }}
             >
-              {isSelected && isSource ? `{{${word}}}` : isSelected && !isSource ? `**${word}**` : word}
+              {token.surface}
             </button>
           );
         })}
       </div>
-    );
-  };
-
-  // Highlight the selected text in the display for Japanese
-  const getHighlightedTextForJapanese = () => {
-    if (!text) return null;
-    
-    // Create a copy of the text to work with
-    let resultJSX = <>{text}</>;
-    
-    // Only proceed if there are selections
-    if (selections.length > 0) {
-      // Sort selections by length (descending) to handle overlapping selections
-      const sortedSelections = [...selections].sort((a, b) => b.length - a.length);
-      
-      // Split text into parts with selections highlighted
-      let parts: React.ReactNode[] = [text];
-      
-      for (const selection of sortedSelections) {
-        parts = parts.flatMap(part => {
-          if (typeof part !== 'string') return [part];
-          
-          const splitParts = part.split(selection);
-          const result: React.ReactNode[] = [];
-          
-          for (let i = 0; i < splitParts.length; i++) {
-            if (i > 0) {
-              // Apply the appropriate styling based on whether it's source or translation
-              if (isSource) {
-                result.push(
-                  <span key={`sel-${i}-${selection}`} className="bg-blue-100 text-blue-800 mx-0.5 px-0.5 rounded border border-blue-200">
-                    {`{{${selection}}}`}
-                  </span>
-                );
-              } else {
-                result.push(
-                  <span key={`sel-${i}-${selection}`} className="font-bold text-orange-600 mx-0.5">
-                    {selection}
-                  </span>
-                );
-              }
-            }
-            if (splitParts[i]) {
-              result.push(splitParts[i]);
-            }
-          }
-          
-          return result;
-        });
-      }
-      
-      resultJSX = <>{parts}</>;
-    }
-    
-    return resultJSX;
-  };
-
-  // Render Japanese interface with slide-to-select
-  const renderJapaneseInterface = () => {
-    return (
-      <>
-        <div 
-          ref={containerRef}
-          className={`py-3 px-4 rounded-md ${
-            isSource ? 'bg-blue-50 font-medium' : 'bg-gray-50'
-          } select-text cursor-text`}
-          onMouseDown={handleMouseDown}
-          onMouseUp={handleMouseUp}
-          onTouchStart={handleTouchStart}
-          onTouchEnd={handleTouchEnd}
-          style={{
-            WebkitUserSelect: 'text',
-            MozUserSelect: 'text',
-            msUserSelect: 'text',
-            userSelect: 'text',
-            WebkitTouchCallout: 'default',
-            WebkitTapHighlightColor: 'rgba(0,0,0,0.1)'
-          }}
-        >
-          {getHighlightedTextForJapanese()}
-        </div>
-        
-        {selectedText && (
-          <div className="mt-2 flex justify-center space-x-2">
-            <button
-              onClick={handleAddSelection}
-              className={`text-white py-2 px-4 rounded-md text-sm font-medium shadow-md transition-all duration-200 ${
-                isSource ? 'bg-blue-500 hover:bg-blue-600' : 'bg-orange-500 hover:bg-orange-600'
-              } active:scale-95`}
-              style={{ minHeight: '44px' }} // iOS minimum touch target size
-            >
-              {selections.includes(selectedText) ? 'Remove' : 'Select'} "{selectedText}"
-            </button>
-            <button
-              onClick={() => {
-                setSelectedText('');
-                window.getSelection()?.removeAllRanges();
-              }}
-              className="bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded-md text-sm font-medium shadow-md transition-all duration-200 active:scale-95"
-              style={{ minHeight: '44px' }}
-            >
-              Clear
-            </button>
-          </div>
-        )}
-      </>
-    );
-  };
-
-  return (
-    <div className="relative">
-      {sourceLanguage === 'spa' ? renderSpanishInterface() : renderJapaneseInterface()}
     </div>
   );
 };
