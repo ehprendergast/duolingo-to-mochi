@@ -140,45 +140,45 @@ const FormattedTextOutput: React.FC<FormattedTextOutputProps> = ({ textPairs }) 
             <>
               <button
                 onClick={handleStartEditing}
-                className="hidden sm:flex items-center px-2.5 py-2 rounded-lg text-xs bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-100 min-h-[40px]"
+                className="flex items-center px-2.5 py-2 rounded-lg text-xs bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-100 min-h-[40px]"
               >
                 <Edit2 size={12} className="mr-1" />
-                Edit
+                <span className="hidden sm:inline">Edit</span>
+              </button>
+              <button
+                onClick={handleDownload}
+                className="flex items-center px-3 py-2 rounded-lg text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white shadow-md min-h-[44px] active:scale-95"
+                title="Download as Markdown - for Mochi import"
+              >
+                <Download size={14} className="mr-1.5" />
+                .md
               </button>
               <button 
                 onClick={handleCopy}
-                className={`flex items-center px-3 py-2 rounded-lg text-xs font-medium transition-all min-h-[44px] active:scale-95 ${
+                className={`flex items-center px-3 py-2 rounded-lg text-xs font-medium transition-all min-h-[44px] active:scale-95 border ${
                   copied 
-                    ? 'bg-green-500 text-white shadow-md' 
-                    : 'bg-gray-900 hover:bg-black text-white shadow'
+                    ? 'bg-green-50 text-green-700 border-green-200' 
+                    : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200'
                 }`}
               >
                 {copied ? (
                   <>
-                    <CheckCircle size={14} className="mr-1.5" />
-                    Copied!
+                    <CheckCircle size={14} className="mr-1" />
+                    <span className="ml-1 hidden sm:inline">Copied!</span>
                   </>
                 ) : (
                   <>
-                    <Copy size={14} className="mr-1.5" />
-                    Copy
+                    <Copy size={14} className="mr-1" />
+                    <span className="ml-1 hidden sm:inline">Copy</span>
                   </>
                 )}
               </button>
               <button
                 onClick={handleShare}
-                className="sm:hidden flex items-center px-3 py-2 rounded-lg text-xs bg-white text-gray-700 hover:bg-gray-50 border border-gray-200 min-h-[44px] active:scale-95"
+                className="flex sm:hidden items-center px-2.5 py-2 rounded-lg text-xs bg-white text-gray-700 hover:bg-gray-50 border border-gray-200 min-h-[44px] active:scale-95"
                 title="Share"
               >
                 <Share2 size={14} />
-              </button>
-              <button
-                onClick={handleDownload}
-                className="hidden sm:flex items-center px-2.5 py-2 rounded-lg text-xs bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-100 min-h-[40px]"
-                title="Download as Markdown"
-              >
-                <Download size={12} className="mr-1" />
-                .md
               </button>
             </>
           )}
