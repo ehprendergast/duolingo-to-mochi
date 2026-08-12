@@ -6,7 +6,7 @@ import ImageProcessingPreview from './ImageProcessingPreview';
 import { processImageWithTesseractOCR, terminateAllWorkers } from '../services/azureOCR';
 import { separateTextPairs, generateId } from '../utils/formatting';
 import { ProcessedTextPair, ImageProcessingResult } from '../types';
-import { getLanguageProfile, LANGUAGE_REGISTRY, formatLanguageOption } from '../services/languageRegistry';
+import { getLanguageProfile, getAvailableSourceLanguages } from '../services/languageRegistry';
 import { AlertCircle, ArrowRight, Languages, Sparkles, Zap } from 'lucide-react';
 
 const DuolingoProcessor: React.FC = () => {
@@ -143,11 +143,11 @@ const DuolingoProcessor: React.FC = () => {
               onChange={(e) => setSourceLanguage(e.target.value)}
               className="flex-1 sm:flex-none border border-gray-300 rounded-lg py-2.5 px-3 text-sm bg-white min-h-[44px] text-[16px] sm:text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
             >
-              <option value="spa">🇪🇸 Spanish → English</option>
-              <option value="jpn">🇯🇵 Japanese → English (✨ new: tap words)</option>
-              <option value="zho">🇨🇳 Chinese → English (experimental)</option>
-              <option value="fra">🇫🇷 French → English</option>
-              <option value="deu">🇩🇪 German → English</option>
+              {getAvailableSourceLanguages().map(p => (
+                <option key={p.code} value={p.code}>
+                  {p.flag} {p.name} → English{p.code === 'jpn' ? ' (✨ tap words + furigana)' : p.code === 'zho' ? ' (experimental + pinyin soon)' : ''}
+                </option>
+              ))}
             </select>
             
             {currentProfile.supportsFurigana && (
@@ -283,12 +283,13 @@ const DuolingoProcessor: React.FC = () => {
           What's new in this version
         </h3>
         <ul className="text-xs text-gray-600 space-y-1 list-disc list-inside">
-          <li><strong>Japanese tap-to-select:</strong> Words are auto-tokenized (nouns, verbs, particles separated) — no more dragging!</li>
-          <li><strong>Auto furigana:</strong> Kanji words automatically get <code className="bg-white px-1 rounded">{'{{{kanji}(yomi)}}'}</code> format for Mochi</li>
-          <li><strong>Faster OCR:</strong> Worker caching, image preprocessing, concurrent processing (2x speed)</li>
-          <li><strong>Better mobile UX:</strong> Larger tap targets (44px), 16px inputs to prevent zoom, sticky copy button</li>
-          <li><strong>Extensible:</strong> Language registry now supports Chinese, French, German — add new Duolingo language with 1 config line</li>
-          <li><strong>Cloud OCR optional:</strong> Set <code className="bg-white px-1 rounded">VITE_OCR_PROVIDER=cloud</code> and add Netlify function for Google Vision / OpenAI Vision (10x accuracy)</li>
+          <li><strong>Japanese tap-to-select:</strong> Words auto-tokenized (私/は/学生/です) via Intl.Segmenter + kuromoji — no more dragging!</li>
+          <li><strong>Auto furigana:</strong> Kanji → <code className="bg-white px-1 rounded">{'{{{kanji}(yomi)}}'}</code> for Mochi, toggle 振り仮名ON/OFF</li>
+          <li><strong>10 Duo languages:</strong> ES, JA (tap+furigana), ZH, FR, DE, IT, PT-BR, KO, NL, SV — all Duolingo-supported (Thai excluded, not on Duo)</li>
+          <li><strong>OCR tuned for sharing images:</strong> Your 1500x1500 screenshots — crops bottom 38% logo/character, stronger contrast for gray text</li>
+          <li><strong>Faster:</strong> Worker cache, 2x upscale, concurrent processing</li>
+          <li><strong>Mobile:</strong> 44px targets, paste from clipboard, camera capture, Download .md visible on mobile (fix for Mochi import)</li>
+          <li><strong>Cloud OCR:</strong> Google Vision working (billing enabled) — fallback to Tesseract. Enable with <code className="bg-white px-1 rounded">VITE_OCR_PROVIDER=cloud</code></li>
         </ul>
       </div>
     </div>
