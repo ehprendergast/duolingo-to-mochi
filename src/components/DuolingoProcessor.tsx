@@ -137,15 +137,15 @@ const DuolingoProcessor: React.FC = () => {
             </div>
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0 flex-1 sm:flex-none">
             <select
               value={sourceLanguage}
               onChange={(e) => setSourceLanguage(e.target.value)}
-              className="flex-1 sm:flex-none border border-gray-300 rounded-lg py-2.5 px-3 text-sm bg-white min-h-[44px] text-[16px] sm:text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              className="w-full sm:w-auto max-w-[160px] sm:max-w-[240px] border border-gray-300 rounded-lg py-2.5 px-2 sm:px-3 text-sm bg-white min-h-[44px] text-[16px] sm:text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent truncate"
             >
               {getAvailableSourceLanguages().map(p => (
                 <option key={p.code} value={p.code}>
-                  {p.flag} {p.name} → English{p.code === 'jpn' ? ' (✨ tap words + furigana)' : p.code === 'zho' ? ' (experimental + pinyin soon)' : ''}
+                  {p.flag} {p.name}
                 </option>
               ))}
             </select>
