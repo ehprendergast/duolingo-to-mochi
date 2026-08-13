@@ -179,7 +179,7 @@ const JapaneseTokenSelector: React.FC<JapaneseTokenSelectorProps> = ({
             <span className="text-green-600">✓ {furiganaReadyCount}/{totalKanjiTokens} furigana ready</span>
           )}
           {!isEnhancing && !cloudFuriganaLoading && furiganaReadyCount === 0 && totalKanjiTokens > 0 && kuromojiFailed && (
-            <span className="text-amber-600">⚠ {totalKanjiTokens} kanji - add OPENAI_API_KEY for auto furigana, or manual</span>
+            <span className="text-amber-600">⚠ {totalKanjiTokens} kanji - set ANTHROPIC_API_KEY in Netlify (or OPENAI) then redeploy</span>
           )}
         </div>
         {autoFurigana && (
