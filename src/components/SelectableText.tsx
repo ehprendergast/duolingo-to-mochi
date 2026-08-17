@@ -72,15 +72,26 @@ const SpacedTokenSelector: React.FC<{
 }> = ({ text, selections, onSelectionsChange, isSource }) => {
   const selectedSet = useMemo(() => new Set(selections), [selections]);
 
-  // Split preserving punctuation but also making punctuation non-selectable for better UX
-  const getTokens = () => {
-    if (!text) return [];
-    // Match words including apostrophes, or punctuation as separate
-    const matches = text.match(/[\p{L}\p{N}\p{M}’']+|[^\s\p{L}\p{N}]+|\s+/gu) || [text];
-    return matches.filter(m => m.trim().length > 0);
-  };
+  // Use same tokenization as formatting.ts, but create wordIdx that skips
+  // punctuation/whitespace so indices align with formatter's wordIdx.
+  // Bug was: old code counted punctuation as index, formatter didn't -> off-by-N.
+  const allParts = text.match(/[\p{L}\p{N}\p{M}’']+|[^\s\p{L}\p{N}]+|\s+/gu) || [text];
 
-  const words = getTokens();
+  type Item =
+    | { type: 'punct'; surface: string; key: string }
+    | { type: 'word'; surface: string; index: number; key: string };
+
+  const items: Item[] = [];
+  let wordIdxCounter = 0;
+  let keyCounter = 0;
+  for (const part of allParts) {
+    if (/^\s+$/.test(part)) continue; // whitespace handled by flex gap
+    if (/^[^\p{L}\p{N}]+$/u.test(part)) {
+      items.push({ type: 'punct', surface: part, key: `p_${keyCounter++}_${part}` });
+    } else {
+      items.push({ type: 'word', surface: part, index: wordIdxCounter++, key: `w_${keyCounter++}_${part}` });
+    }
+  }
 
   const toggleWord = (word: string, index: number) => {
     const wordId = `${word}_${index}`;
@@ -91,31 +102,28 @@ const SpacedTokenSelector: React.FC<{
     }
   };
 
-  const isPunctuation = (w: string) => /^[^\p{L}\p{N}]+$/u.test(w);
-
   return (
     <div
       className={`py-3 px-3 rounded-md border flex flex-wrap gap-2 ${
         isSource ? 'bg-blue-50/50 border-blue-100' : 'bg-orange-50/50 border-orange-100'
       }`}
     >
-      {words.map((word, index) => {
-        const wordId = `${word}_${index}`;
-        const isSelected = selectedSet.has(wordId);
-        const punct = isPunctuation(word);
-
-        if (punct) {
+      {items.map(item => {
+        if (item.type === 'punct') {
           return (
-            <span key={`${word}-${index}`} className="px-1 py-2 text-gray-400 text-[15px]">
-              {word}
+            <span key={item.key} className="px-1 py-2 text-gray-400 text-[15px]">
+              {item.surface}
             </span>
           );
         }
 
+        const wordId = `${item.surface}_${item.index}`;
+        const isSelected = selectedSet.has(wordId);
+
         return (
           <button
-            key={`${word}-${index}`}
-            onClick={() => toggleWord(word, index)}
+            key={item.key}
+            onClick={() => toggleWord(item.surface, item.index)}
             className={`px-3 py-2 rounded-lg text-[15px] transition-all duration-150 border active:scale-95 select-none min-h-[44px] ${
               isSelected
                 ? isSource
@@ -125,7 +133,7 @@ const SpacedTokenSelector: React.FC<{
             }`}
             style={{ WebkitTapHighlightColor: 'transparent' }}
           >
-            {isSelected && isSource ? `{{${word}}}` : isSelected && !isSource ? `**${word}**` : word}
+            {isSelected && isSource ? `{{${item.surface}}}` : isSelected && !isSource ? `**${item.surface}**` : item.surface}
           </button>
         );
       })}
