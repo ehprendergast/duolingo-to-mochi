@@ -3,6 +3,7 @@ import JapaneseTokenSelector from './JapaneseTokenSelector';
 import { Token } from '../services/japaneseTokenizer';
 import { tokenizeWithIntl } from '../services/japaneseTokenizer';
 import { containsKanji } from '../utils/kana';
+import { splitSpacedText } from '../utils/formatting';
 
 interface SelectableTextProps {
   text: string;
@@ -72,31 +73,32 @@ const SpacedTokenSelector: React.FC<{
 }> = ({ text, selections, onSelectionsChange, isSource }) => {
   const selectedSet = useMemo(() => new Set(selections), [selections]);
 
-  // Use same tokenization as formatting.ts, but create wordIdx that skips
-  // punctuation/whitespace so indices align with formatter's wordIdx.
-  // Bug was: old code counted punctuation as index, formatter didn't -> off-by-N.
-  const allParts = text.match(/[\p{L}\p{N}\p{M}’']+|[^\s\p{L}\p{N}]+|\s+/gu) || [text];
-
   type Item =
     | { type: 'punct'; surface: string; key: string }
-    | { type: 'word'; surface: string; index: number; key: string };
+    | { type: 'word'; surface: string; start: number; end: number; wordIndex: number; key: string };
 
   const items: Item[] = [];
-  let wordIdxCounter = 0;
-  let keyCounter = 0;
-  for (const part of allParts) {
-    if (/^\s+$/.test(part)) continue; // whitespace handled by flex gap
-    if (/^[^\p{L}\p{N}]+$/u.test(part)) {
-      items.push({ type: 'punct', surface: part, key: `p_${keyCounter++}_${part}` });
-    } else {
-      items.push({ type: 'word', surface: part, index: wordIdxCounter++, key: `w_${keyCounter++}_${part}` });
+  for (const part of splitSpacedText(text)) {
+    if (part.isWhitespace) continue;
+    if (part.isPunctuation) {
+      items.push({ type: 'punct', surface: part.surface, key: `p_${part.start}_${part.surface}` });
+    } else if (part.wordIndex !== null) {
+      items.push({
+        type: 'word',
+        surface: part.surface,
+        start: part.start,
+        end: part.end,
+        wordIndex: part.wordIndex,
+        key: `w_${part.start}_${part.surface}`,
+      });
     }
   }
 
-  const toggleWord = (word: string, index: number) => {
-    const wordId = `${word}_${index}`;
-    if (selectedSet.has(wordId)) {
-      onSelectionsChange(selections.filter(s => s !== wordId));
+  const toggleWord = (word: string, wordIndex: number, start: number, end: number) => {
+    const wordId = `range:${start}:${end}`;
+    const legacyWordId = `${word}_${wordIndex}`;
+    if (selectedSet.has(wordId) || selectedSet.has(legacyWordId)) {
+      onSelectionsChange(selections.filter(s => s !== wordId && s !== legacyWordId));
     } else {
       onSelectionsChange([...selections, wordId]);
     }
@@ -117,13 +119,13 @@ const SpacedTokenSelector: React.FC<{
           );
         }
 
-        const wordId = `${item.surface}_${item.index}`;
-        const isSelected = selectedSet.has(wordId);
+        const wordId = `range:${item.start}:${item.end}`;
+        const isSelected = selectedSet.has(wordId) || selectedSet.has(`${item.surface}_${item.wordIndex}`);
 
         return (
           <button
             key={item.key}
-            onClick={() => toggleWord(item.surface, item.index)}
+            onClick={() => toggleWord(item.surface, item.wordIndex, item.start, item.end)}
             className={`px-3 py-2 rounded-lg text-[15px] transition-all duration-150 border active:scale-95 select-none min-h-[44px] ${
               isSelected
                 ? isSource

@@ -33,24 +33,63 @@ export const formatTextPairs = (pairs: ProcessedTextPair[]): string => {
 };
 
 /**
- * Parse a selection string of form `${surface}_${index}` into parts
- * Also handles legacy raw selections (for backward compat with drag-select)
+ * Parse offset-based spaced selections and legacy `${surface}_${index}` selections.
+ * Raw drag selections remain supported for backward compatibility.
  */
-function parseTokenSelection(sel: string): { surface: string; index: number | null } {
-  // Try to split on last underscore
-  const lastUnderscore = sel.lastIndexOf('_');
-  if (lastUnderscore === -1) {
-    return { surface: sel, index: null };
+function parseTokenSelection(sel: string): {
+  surface: string;
+  index: number | null;
+  range: { start: number; end: number } | null;
+} {
+  const rangeMatch = /^range:(\d+):(\d+)$/.exec(sel);
+  if (rangeMatch) {
+    return {
+      surface: '',
+      index: null,
+      range: { start: Number(rangeMatch[1]), end: Number(rangeMatch[2]) },
+    };
   }
-  const surface = sel.slice(0, lastUnderscore);
-  const indexStr = sel.slice(lastUnderscore + 1);
-  const index = parseInt(indexStr, 10);
-  if (isNaN(index)) {
-    // Not a token index format, treat whole string as surface (legacy phrase selection)
-    return { surface: sel, index: null };
+
+  const indexedMatch = /^(.*)_(\d+)$/.exec(sel);
+  if (!indexedMatch) {
+    return { surface: sel, index: null, range: null };
   }
-  return { surface, index };
+
+  return { surface: indexedMatch[1], index: Number(indexedMatch[2]), range: null };
 }
+
+export interface SpacedTextPart {
+  surface: string;
+  start: number;
+  end: number;
+  wordIndex: number | null;
+  isWhitespace: boolean;
+  isPunctuation: boolean;
+}
+
+export const splitSpacedText = (text: string): SpacedTextPart[] => {
+  const pattern = /[\p{L}\p{N}\p{M}]+(?:[’'][\p{L}\p{N}\p{M}]+)*|[^\s\p{L}\p{N}\p{M}]+|\s+/gu;
+  const parts: SpacedTextPart[] = [];
+  let wordIndex = 0;
+
+  for (const match of text.matchAll(pattern)) {
+    const surface = match[0];
+    const start = match.index;
+    const isWhitespace = /^\s+$/u.test(surface);
+    const isPunctuation = !isWhitespace && !/[\p{L}\p{N}\p{M}]/u.test(surface);
+
+    parts.push({
+      surface,
+      start,
+      end: start + surface.length,
+      wordIndex: isWhitespace || isPunctuation ? null : wordIndex++,
+      isWhitespace,
+      isPunctuation,
+    });
+  }
+
+  return parts;
+};
 
 /**
  * Format source text with selections wrapped
@@ -150,40 +189,40 @@ export const formatSourceWithSelections = (
 
   // Spanish / other spaced languages
   if (!isUnspacedLanguage(sourceLanguage)) {
-    // selections are like "word_index"
+    // New selections use exact character ranges; word indices remain supported.
     const selectedPositions = new Set<number>();
+    const selectedRanges = new Set<string>();
     const rawWordsToSelect = new Set<string>();
 
     for (const sel of selections) {
       const parsed = parseTokenSelection(sel);
-      if (parsed.index !== null) {
+      if (parsed.range) {
+        selectedRanges.add(`${parsed.range.start}:${parsed.range.end}`);
+      } else if (parsed.index !== null) {
         selectedPositions.add(parsed.index);
       } else {
         rawWordsToSelect.add(parsed.surface);
       }
     }
 
-    // Split text into tokens similar to display
-    const words = text.match(/[\p{L}\p{N}\p{M}’']+|[^\s\p{L}\p{N}]+|\s+/gu) || [text];
-    let wordIdx = 0;
     const formattedParts: string[] = [];
 
-    for (const part of words) {
-      if (/^\s+$/.test(part)) {
-        formattedParts.push(part);
-        continue;
-      }
-      if (/^[^\p{L}\p{N}]+$/u.test(part)) {
-        formattedParts.push(part);
+    for (const part of splitSpacedText(text)) {
+      if (part.isWhitespace || part.isPunctuation) {
+        formattedParts.push(part.surface);
         continue;
       }
 
-      if (selectedPositions.has(wordIdx) || rawWordsToSelect.has(part)) {
-        formattedParts.push(`{{${part}}}`);
+      const rangeKey = `${part.start}:${part.end}`;
+      if (
+        selectedRanges.has(rangeKey) ||
+        (part.wordIndex !== null && selectedPositions.has(part.wordIndex)) ||
+        rawWordsToSelect.has(part.surface)
+      ) {
+        formattedParts.push(`{{${part.surface}}}`);
       } else {
-        formattedParts.push(part);
+        formattedParts.push(part.surface);
       }
-      wordIdx++;
     }
 
     return formattedParts.join('').replace(/\| /g, 'I ').trim();
@@ -225,37 +264,38 @@ export const formatTranslationWithSelections = (
   
   if (!isUnspacedLanguage(sourceLanguage)) {
     const selectedPositions = new Set<number>();
+    const selectedRanges = new Set<string>();
     const rawWords = new Set<string>();
 
     for (const sel of selections) {
       const parsed = parseTokenSelection(sel);
-      if (parsed.index !== null) {
+      if (parsed.range) {
+        selectedRanges.add(`${parsed.range.start}:${parsed.range.end}`);
+      } else if (parsed.index !== null) {
         selectedPositions.add(parsed.index);
       } else {
         rawWords.add(parsed.surface);
       }
     }
 
-    const words = text.match(/[\p{L}\p{N}\p{M}’']+|[^\s\p{L}\p{N}]+|\s+/gu) || [text];
-    let wordIdx = 0;
     const formattedParts: string[] = [];
 
-    for (const part of words) {
-      if (/^\s+$/.test(part)) {
-        formattedParts.push(part);
-        continue;
-      }
-      if (/^[^\p{L}\p{N}]+$/u.test(part)) {
-        formattedParts.push(part);
+    for (const part of splitSpacedText(text)) {
+      if (part.isWhitespace || part.isPunctuation) {
+        formattedParts.push(part.surface);
         continue;
       }
 
-      if (selectedPositions.has(wordIdx) || rawWords.has(part)) {
-        formattedParts.push(`**${part}**`);
+      const rangeKey = `${part.start}:${part.end}`;
+      if (
+        selectedRanges.has(rangeKey) ||
+        (part.wordIndex !== null && selectedPositions.has(part.wordIndex)) ||
+        rawWords.has(part.surface)
+      ) {
+        formattedParts.push(`**${part.surface}**`);
       } else {
-        formattedParts.push(part);
+        formattedParts.push(part.surface);
       }
-      wordIdx++;
     }
 
     return formattedParts.join('');
