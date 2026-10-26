@@ -1,6 +1,6 @@
 import { createWorker, Worker } from 'tesseract.js';
 import { OCRResult } from '../types';
-import { getLanguageProfile } from './languageRegistry';
+import { getLanguageProfile, textMatchesLanguageScript } from './languageRegistry';
 
 /**
  * Enhanced OCR Service - Tuned for Duolingo sharing images
@@ -140,14 +140,24 @@ export const processImageWithTesseractOCR = async (imageUrl: string, language: s
     if (ocrProvider === 'cloud') {
       try {
         const cloudResult = await processWithCloudOCR(imageUrl, language);
-        if (cloudResult && cloudResult.length > 0) return cloudResult;
+        if (cloudResult && cloudResult.length > 0) {
+          // A non-empty cloud result is not necessarily a *correct* one:
+          // if the provider ran with wrong language hints it can return
+          // Latin-script garbage for e.g. a Korean image. Only accept the
+          // result when it contains the expected script; otherwise fall
+          // through to Tesseract, which handles these languages locally.
+          const cloudText = cloudResult.map(r => r.text).join('\n');
+          if (textMatchesLanguageScript(cloudText, language)) {
+            return cloudResult;
+          }
+          console.warn(`Cloud OCR returned no ${language} script, falling back to Tesseract`);
+        }
       } catch (cloudErr) {
         console.warn('Cloud OCR failed, falling back:', cloudErr);
       }
     }
 
     const processedImageUrl = await preprocessImage(imageUrl);
-    const profile = getLanguageProfile(language);
 
     // Full mapping for 10+ Duolingo languages - all supported by Tesseract
     const langMap: Record<string, string> = {
@@ -217,13 +227,15 @@ async function processWithCloudOCR(imageUrl: string, language: string): Promise<
     base64Data = await blobToBase64(blob);
   }
 
+  const profile = getLanguageProfile(language);
+
   const res = await fetch('/.netlify/functions/ocr', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       image: base64Data,
       language,
-      prompt: `Extract Duolingo ${language} sentence and English translation. The image is a 1500x1500 sharing image with a white speech bubble on top containing foreign text then English translation. Ignore the small flag icon, the duolingo logo, and the character illustration. The bubble text is the only important content.`,
+      prompt: `Extract Duolingo ${profile.name} sentence and English translation. The image is a 1500x1500 sharing image with a white speech bubble on top containing foreign text then English translation. Ignore the small flag icon, the duolingo logo, and the character illustration. The bubble text is the only important content.`,
     }),
   });
 

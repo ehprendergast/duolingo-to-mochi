@@ -108,12 +108,35 @@ async function handleRequest(req) {
 async function handleGoogleVision(base64Image, language) {
   const base64Data = base64Image.replace(/^data:image\/\w+;base64,/, '');
 
+  // BCP-47 language hints for Google Vision, keyed by the app's
+  // ISO 639-3 registry codes. This MUST cover every language in
+  // src/services/languageRegistry.ts: a missing entry falls back to
+  // English-only hints, and with an English hint Vision misreads
+  // non-Latin scripts — Korean ('kor') images came back as garbled
+  // Latin text or lost the Korean line entirely, which is why Korean
+  // "didn't work" while Spanish/Japanese (present here) were fine.
   const languageHints = {
     spa: ['es', 'en'],
     jpn: ['ja', 'en'],
     zho: ['zh', 'en'],
     fra: ['fr', 'en'],
     deu: ['de', 'en'],
+    ita: ['it', 'en'],
+    por: ['pt', 'en'],
+    kor: ['ko', 'en'],
+    nld: ['nl', 'en'],
+    swe: ['sv', 'en'],
+    rus: ['ru', 'en'],
+    ara: ['ar', 'en'],
+    hin: ['hi', 'en'],
+    ell: ['el', 'en'],
+    pol: ['pl', 'en'],
+    tur: ['tr', 'en'],
+    heb: ['iw', 'en'], // Google Vision uses the legacy 'iw' code for Hebrew
+    vi: ['vi', 'en'],
+    id: ['id', 'en'],
+    ukr: ['uk', 'en'],
+    eng: ['en'],
   };
   const hints = languageHints[language] || ['en'];
 
@@ -181,7 +204,13 @@ async function handleGoogleVision(base64Image, language) {
 }
 
 async function handleOpenAIVision(base64Image, language, customPrompt) {
-  const languageNames = { spa: 'Spanish', jpn: 'Japanese', zho: 'Chinese', fra: 'French', deu: 'German' };
+  const languageNames = {
+    spa: 'Spanish', jpn: 'Japanese', zho: 'Chinese', fra: 'French', deu: 'German',
+    ita: 'Italian', por: 'Portuguese', kor: 'Korean', nld: 'Dutch', swe: 'Swedish',
+    rus: 'Russian', ara: 'Arabic', hin: 'Hindi', ell: 'Greek', pol: 'Polish',
+    tur: 'Turkish', heb: 'Hebrew', vi: 'Vietnamese', id: 'Indonesian', ukr: 'Ukrainian',
+    eng: 'English',
+  };
   const langName = languageNames[language] || language;
 
   const systemPrompt = `You are an OCR assistant for Duolingo screenshots. Extract the foreign language sentence (${langName}) and its English translation. Ignore UI like streak, hearts, avatars. Return ONLY JSON: { "sourceText": "...", "translationText": "..." }`;
