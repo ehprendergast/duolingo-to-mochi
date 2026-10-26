@@ -365,6 +365,33 @@ export function getAllDuolingoLanguages(): LanguageProfile[] {
   return Object.values(LANGUAGE_REGISTRY).filter(p => p.duoSupported && p.code !== 'eng');
 }
 
+/**
+ * Unicode script ranges used to sanity-check OCR output.
+ * A cloud OCR provider given the wrong language hints (e.g. English-only
+ * hints for a Korean image) can return Latin-script garbage that is
+ * non-empty, so "got a result" is not enough — if the recognised text
+ * contains none of the expected script, it can't be a valid read of a
+ * sentence in that language and the caller should fall back.
+ * Latin-script languages have no entry: no reliable check is possible.
+ */
+const SCRIPT_PATTERNS: Partial<Record<LanguageCode, RegExp>> = {
+  jpn: /[\u3040-\u30FF\u4E00-\u9FFF]/, // Hiragana, Katakana, Kanji
+  zho: /[\u4E00-\u9FFF]/, // Han
+  kor: /[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F]/, // Hangul syllables, Jamo, compatibility Jamo
+  rus: /[\u0400-\u04FF]/, // Cyrillic
+  ukr: /[\u0400-\u04FF]/, // Cyrillic
+  ara: /[\u0600-\u06FF]/, // Arabic
+  heb: /[\u0590-\u05FF]/, // Hebrew
+  ell: /[\u0370-\u03FF]/, // Greek
+  hin: /[\u0900-\u097F]/, // Devanagari
+};
+
+export function textMatchesLanguageScript(text: string, code: string): boolean {
+  const pattern = SCRIPT_PATTERNS[code as LanguageCode];
+  if (!pattern) return true; // Latin-script (or unknown) language: no check possible
+  return pattern.test(text);
+}
+
 export function isUnspacedLanguage(code: string): boolean {
   const profile = getLanguageProfile(code);
   return profile.tokenization === 'unspaced';
