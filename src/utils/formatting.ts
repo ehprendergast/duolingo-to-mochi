@@ -4,29 +4,39 @@ import { containsKanji } from './kana';
 import { getLanguageProfile, isUnspacedLanguage } from '../services/languageRegistry';
 
 /**
+ * Formats a single text pair as one Mochi card block (no separator).
+ * Kept separate from formatTextPairs so callers can track each card's
+ * generated text individually (used to merge upstream pair edits into
+ * the editable final output without clobbering manual edits).
+ */
+export const formatTextPair = (pair: ProcessedTextPair): string => {
+  const formattedSource = formatSourceWithSelections(
+    pair.sourceText,
+    pair.sourceSelections,
+    pair.sourceLanguage,
+    pair.sourceTokens,
+    pair.autoFurigana
+  );
+  const formattedTranslation = formatTranslationWithSelections(
+    pair.translationText,
+    pair.translationSelections,
+    pair.sourceLanguage
+  );
+
+  return `# ${formattedSource}\n${formattedTranslation}`;
+};
+
+/**
  * Formats text pairs according to Mochi import format
  * Adds "# " prefix and separates pairs with -----
  */
 export const formatTextPairs = (pairs: ProcessedTextPair[]): string => {
   if (pairs.length === 0) return '';
-  
+
   return pairs
     .map((pair, index) => {
-      const formattedSource = formatSourceWithSelections(
-        pair.sourceText,
-        pair.sourceSelections,
-        pair.sourceLanguage,
-        pair.sourceTokens,
-        pair.autoFurigana
-      );
-      const formattedTranslation = formatTranslationWithSelections(
-        pair.translationText,
-        pair.translationSelections,
-        pair.sourceLanguage
-      );
-      
-      const pairText = `# ${formattedSource}\n${formattedTranslation}`;
-      
+      const pairText = formatTextPair(pair);
+
       return index === pairs.length - 1 ? pairText : `${pairText}\n-----`;
     })
     .join('\n');
