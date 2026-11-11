@@ -92,6 +92,60 @@ export const splitSpacedText = (text: string): SpacedTextPart[] => {
 };
 
 /**
+ * Merge adjacent plain cloze units that are separated by nothing or
+ * only whitespace into a single unit: "{{B}} {{C}}" -> "{{B C}}".
+ * Furigana units ({{{surface}(reading)}}}) are left alone — the guards
+ * prevent matching the inner braces of a triple-brace unit.
+ */
+export const mergeAdjacentClozeUnits = (text: string): string => {
+  const pattern = /(?<!\{)\{\{([^{}]+)\}\}(\s*)\{\{([^{}]+)\}\}(?!\})/g;
+  let result = text;
+  let previous: string;
+  do {
+    previous = result;
+    result = result.replace(
+      pattern,
+      (_match, first: string, separator: string, second: string) =>
+        `{{${first}${separator}${second}}}`
+    );
+  } while (result !== previous);
+  return result;
+};
+
+/**
+ * Format one run of consecutively selected tokens as a single cloze
+ * unit. Consecutive selections form ONE cloze ({{B C D}}), not one
+ * wrapper per token. When every kanji token in the run has a reading,
+ * the run gets a single furigana annotation with the concatenated
+ * reading; otherwise it falls back to a plain cloze.
+ */
+const formatClozeRun = (
+  run: Token[],
+  autoFurigana: boolean,
+  supportsFurigana: boolean
+): string => {
+  const surface = run.map((t) => t.surface).join('');
+
+  if (autoFurigana && supportsFurigana) {
+    const kanjiTokens = run.filter((t) => containsKanji(t.surface));
+    const allKanjiHaveReadings = kanjiTokens.every(
+      (t) => t.readingHiragana || t.reading
+    );
+    if (kanjiTokens.length > 0 && allKanjiHaveReadings) {
+      const reading = run
+        .map((t) => t.readingHiragana || t.reading || t.surface)
+        .join('');
+      if (reading !== surface) {
+        // Same furigana form the per-token code produced: {{{surface}(reading)}}
+        return `{{{${surface}}(${reading})}}`;
+      }
+    }
+  }
+
+  return `{{${surface}}}`;
+};
+
+/**
  * Format source text with selections wrapped
  * Supports:
  *  - Spaced languages: {{word}}
@@ -129,46 +183,25 @@ export const formatSourceWithSelections = (
       }
     }
 
-    // Build formatted text by walking tokens and preserving original spacing/punctuation
-    let result = '';
-    // Since Intl.Segmenter stripped spaces, we need to reconstruct from original text
-    // Simpler: rebuild from tokens with selections applied, joining with no space for unspaced
-    // But we want to preserve original text's exact form for non-selected parts
-    
-    // For true reconstruction, we use the original text and token offsets if available
-    // Fallback: join selected tokens with cloze markup inline
-
-    // Approach: create array of strings for each token position, with cloze if selected
+    // Build formatted text by walking tokens: consecutive selected
+    // tokens are grouped into a single cloze run; unselected tokens
+    // and punctuation pass through verbatim and break runs.
     const parts: string[] = [];
+    let run: Token[] = [];
+    const flushRun = () => {
+      if (run.length === 0) return;
+      parts.push(formatClozeRun(run, autoFurigana, profile.supportsFurigana));
+      run = [];
+    };
     for (const token of tokens) {
-      if (token.isPunctuation) {
-        parts.push(token.surface);
-        continue;
-      }
-
-      if (selectedIndices.has(token.index)) {
-        const reading = token.readingHiragana || 
-                       (token.reading ? token.reading : undefined) ||
-                       undefined;
-        const surface = token.surface;
-
-        // Check if should add furigana
-        const shouldAddFurigana = autoFurigana && 
-                                 containsKanji(surface) && 
-                                 reading && 
-                                 reading !== surface &&
-                                 profile.supportsFurigana;
-
-        if (shouldAddFurigana) {
-          // Mochi format: {{{vocab}(furigana)}}
-          parts.push(`{{{${surface}}(${reading})}}`);
-        } else {
-          parts.push(`{{${surface}}}`);
-        }
+      if (!token.isPunctuation && selectedIndices.has(token.index)) {
+        run.push(token);
       } else {
+        flushRun();
         parts.push(token.surface);
       }
     }
+    flushRun();
 
     // Handle legacy phrase selections that didn't map to tokens
     let formattedText = parts.join('');
@@ -184,7 +217,7 @@ export const formatSourceWithSelections = (
       }
     }
 
-    return formattedText.replace(/\| /g, 'I ').trim();
+    return mergeAdjacentClozeUnits(formattedText).replace(/\| /g, 'I ').trim();
   }
 
   // Spanish / other spaced languages
@@ -205,25 +238,57 @@ export const formatSourceWithSelections = (
       }
     }
 
+    // Consecutive selected words form ONE cloze unit ({{B C D}}),
+    // keeping the whitespace between them inside the braces. A run is
+    // broken by an unselected word or by punctuation.
     const formattedParts: string[] = [];
+    let runText: string | null = null;
+    let pendingWhitespace = '';
+    const flushRun = () => {
+      if (runText !== null) {
+        formattedParts.push(`{{${runText}}}`);
+        runText = null;
+      }
+      if (pendingWhitespace) {
+        formattedParts.push(pendingWhitespace);
+        pendingWhitespace = '';
+      }
+    };
 
     for (const part of splitSpacedText(text)) {
-      if (part.isWhitespace || part.isPunctuation) {
+      if (part.isWhitespace) {
+        // Hold whitespace while a run is open: it belongs inside the
+        // cloze if the next word is also selected, outside if not.
+        if (runText !== null) {
+          pendingWhitespace += part.surface;
+        } else {
+          formattedParts.push(part.surface);
+        }
+        continue;
+      }
+
+      if (part.isPunctuation) {
+        flushRun();
         formattedParts.push(part.surface);
         continue;
       }
 
       const rangeKey = `${part.start}:${part.end}`;
-      if (
+      const isSelected =
         selectedRanges.has(rangeKey) ||
         (part.wordIndex !== null && selectedPositions.has(part.wordIndex)) ||
-        rawWordsToSelect.has(part.surface)
-      ) {
-        formattedParts.push(`{{${part.surface}}}`);
+        rawWordsToSelect.has(part.surface);
+
+      if (isSelected) {
+        runText =
+          runText === null ? part.surface : runText + pendingWhitespace + part.surface;
+        pendingWhitespace = '';
       } else {
+        flushRun();
         formattedParts.push(part.surface);
       }
     }
+    flushRun();
 
     return formattedParts.join('').replace(/\| /g, 'I ').trim();
   }
@@ -246,7 +311,7 @@ export const formatSourceWithSelections = (
       }
       formattedText = formattedText.replace(new RegExp(escaped, 'g'), replacement);
     }
-    return formattedText.replace(/\| /g, 'I ').trim();
+    return mergeAdjacentClozeUnits(formattedText).replace(/\| /g, 'I ').trim();
   }
 };
 
