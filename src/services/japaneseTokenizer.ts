@@ -11,7 +11,7 @@
  * 3. Intl post-processing: merge  Kanji+Hiragana (任+せ → 任せ), お/ご prefix + Kanji
  */
 
-import { containsKanji, isContentWordHeuristic, kataToHira, normalizeReading, PARTICLES, PUNCTUATION, isKanji, isHiragana } from '../utils/kana';
+import { containsKanji, containsOnlyKana, isContentWordHeuristic, kataToHira, normalizeReading, PARTICLES, PUNCTUATION, AUXILIARY_VERBS, isKanji, isHiragana } from '../utils/kana';
 
 export interface Token {
   surface: string;
@@ -407,42 +407,130 @@ export function getFuriganaForToken(token: Token): string | undefined {
 }
 
 /**
+ * Build the lookup unit for a kanji token: the word AS IT APPEARS in
+ * the sentence, not the isolated segment.
+ *
+ * Segmentation runs before readings exist, so a segment can be a bare
+ * kanji (履 in 履きます). Looking that segment up on its own yields an
+ * isolated-kanji reading that ignores how the word is actually read in
+ * context (the kun'yomi/on'yomi choice depends on the word, not the
+ * character). So readings are resolved at the word level first: absorb
+ * the following kana tokens that belong to the same word (okurigana
+ * and inflectional kana), stopping at particles, auxiliaries,
+ * punctuation, or another kanji token.
+ */
+export function buildLookupUnit(tokens: Token[], startIndex: number): string {
+  let unit = tokens[startIndex]?.surface ?? '';
+  for (let i = startIndex + 1; i < tokens.length; i++) {
+    const next = tokens[i];
+    if (
+      next.containsKanji ||
+      next.isPunctuation ||
+      next.isParticle ||
+      next.isAuxiliary ||
+      PARTICLES.has(next.surface) ||
+      AUXILIARY_VERBS.has(next.surface) ||
+      !containsOnlyKana(next.surface)
+    ) {
+      break;
+    }
+    unit += next.surface;
+  }
+  return unit;
+}
+
+/**
+ * Map a whole-word reading back onto the kanji token it was fetched
+ * for. The trailing kana of the word (okurigana/inflection) appear
+ * verbatim at the end of both the word and its reading, so strip the
+ * longest common suffix: 履きます/はきます -> は for the token 履.
+ * When the provider returned the dictionary-form reading instead
+ * (履きます -> はく), there is no common suffix and the full reading
+ * is kept — showing the dictionary form over the kanji is helpful
+ * for spotting the stem in an ambiguous conjugation.
+ */
+export function alignReadingToToken(
+  unitText: string,
+  tokenSurface: string,
+  unitReading: string
+): string {
+  if (!unitReading || unitText === tokenSurface || !unitText.startsWith(tokenSurface)) {
+    return unitReading;
+  }
+  const suffix = unitText.slice(tokenSurface.length);
+  let common = 0;
+  while (
+    common < suffix.length &&
+    common < unitReading.length &&
+    suffix[suffix.length - 1 - common] === unitReading[unitReading.length - 1 - common]
+  ) {
+    common++;
+  }
+  if (common > 0 && unitReading.length > common) {
+    return unitReading.slice(0, unitReading.length - common);
+  }
+  return unitReading;
+}
+
+/**
  * Cloud furigana fallback - calls Netlify function /furigana
  * This makes furigana work even when kuromoji fails to load (your mobile case)
+ *
+ * Order of operations matters: readings are resolved for the
+ * contextual word (buildLookupUnit) with the sentence as context, and
+ * only then aligned back onto the individual segment — never looked
+ * up per isolated segment.
  */
 export async function fetchFuriganaForTokens(tokens: Token[], contextSentence: string): Promise<Map<number, string>> {
   const result = new Map<number, string>();
 
-  const kanjiTokens = tokens.filter(t => t.containsKanji && !t.readingHiragana && !t.isPunctuation);
-  if (kanjiTokens.length === 0) return result;
+  const jobs: { tokenIndex: number; tokenSurface: string; unitText: string }[] = [];
+  tokens.forEach((token, i) => {
+    if (token.containsKanji && !token.readingHiragana && !token.isPunctuation) {
+      jobs.push({
+        tokenIndex: token.index,
+        tokenSurface: token.surface,
+        unitText: buildLookupUnit(tokens, i),
+      });
+    }
+  });
+  if (jobs.length === 0) return result;
 
-  // Try to fetch each via API in parallel (limit concurrency)
-  const fetchOne = async (token: Token) => {
+  const fetchUnit = async (unitText: string): Promise<string | null> => {
     try {
       const res = await fetch('/.netlify/functions/furigana', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          text: token.surface,
+          text: unitText,
           context: contextSentence,
           language: 'jpn'
         })
       });
-      if (!res.ok) return;
+      if (!res.ok) return null;
       const data = await res.json();
-      if (data.reading) {
-        result.set(token.index, data.reading);
-      }
+      return data.reading ? (normalizeReading(data.reading) ?? null) : null;
     } catch (e) {
-      console.warn(`Furigana fetch failed for ${token.surface}:`, e);
+      console.warn(`Furigana fetch failed for ${unitText}:`, e);
+      return null;
     }
   };
 
-  // Limit to 5 parallel to avoid rate limits
+  // One request per distinct contextual word, limited concurrency.
+  const uniqueUnits = [...new Set(jobs.map((j) => j.unitText))];
+  const unitReadings = new Map<string, string | null>();
   const concurrency = 3;
-  for (let i = 0; i < kanjiTokens.length; i += concurrency) {
-    const batch = kanjiTokens.slice(i, i + concurrency);
-    await Promise.all(batch.map(fetchOne));
+  for (let i = 0; i < uniqueUnits.length; i += concurrency) {
+    const batch = uniqueUnits.slice(i, i + concurrency);
+    const readings = await Promise.all(batch.map(fetchUnit));
+    batch.forEach((unit, k) => unitReadings.set(unit, readings[k]));
+  }
+
+  for (const job of jobs) {
+    const unitReading = unitReadings.get(job.unitText);
+    if (unitReading) {
+      result.set(job.tokenIndex, alignReadingToToken(job.unitText, job.tokenSurface, unitReading));
+    }
   }
 
   return result;
