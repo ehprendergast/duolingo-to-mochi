@@ -1,8 +1,15 @@
-import React from 'react';
+import { useState, Suspense, lazy } from 'react';
 import DuolingoProcessor from './components/DuolingoProcessor';
-import { Languages, GraduationCap } from 'lucide-react';
+import { Languages, GraduationCap, BookOpen } from 'lucide-react';
+
+// Lazy so Duolingo mode doesn't pay for Book mode's KaTeX bundle.
+const BookClozeProcessor = lazy(() => import('./components/BookClozeProcessor'));
+
+type AppMode = 'duolingo' | 'book';
 
 function App() {
+  const [mode, setMode] = useState<AppMode>('duolingo');
+
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
@@ -12,17 +19,59 @@ function App() {
             <Languages className="h-8 w-8 text-green-500" />
             <h1 className="text-xl font-bold text-gray-800">Duolingo to Mochi Text Processor</h1>
           </div>
-          
+
           <div className="flex items-center space-x-1">
             <GraduationCap className="h-5 w-5 text-green-600" />
             <span className="text-sm font-medium text-gray-600">Generate Mochi flashcards from Duolingo images</span>
           </div>
         </div>
+
+        {/* Mode switch */}
+        <div className="container mx-auto px-4 pb-3">
+          <div className="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1 gap-1">
+            <button
+              onClick={() => setMode('duolingo')}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium min-h-[40px] transition-colors ${
+                mode === 'duolingo'
+                  ? 'bg-green-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-white'
+              }`}
+              type="button"
+            >
+              <Languages size={16} />
+              Duolingo
+            </button>
+            <button
+              onClick={() => setMode('book')}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium min-h-[40px] transition-colors ${
+                mode === 'book'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-white'
+              }`}
+              type="button"
+            >
+              <BookOpen size={16} />
+              Book page
+            </button>
+          </div>
+        </div>
       </header>
-      
+
       {/* Main content */}
       <main>
-        <DuolingoProcessor />
+        {mode === 'duolingo' ? (
+          <DuolingoProcessor />
+        ) : (
+          <Suspense
+            fallback={
+              <div className="container mx-auto px-4 py-16 text-center text-sm text-gray-500">
+                Loading Book Page mode…
+              </div>
+            }
+          >
+            <BookClozeProcessor />
+          </Suspense>
+        )}
       </main>
       
       {/* Footer */}
