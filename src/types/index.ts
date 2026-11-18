@@ -39,3 +39,20 @@ export interface EnrichedSelection {
   reading?: string; // hiragana for Japanese, pinyin for Chinese
   containsKanji: boolean;
 }
+
+// Book Page mode: one photographed/pasted page being edited into a card
+export interface BookPassage {
+  id: string;
+  name: string;
+  /** Current passage text (Markdown, with {{N::...}} clozes applied) */
+  text: string;
+  /** The untouched full transcription, for "Reset to full transcription" */
+  originalText: string;
+  imageUrl?: string;
+  status: 'transcribing' | 'ready' | 'error';
+  /** True when the on-device Tesseract fallback produced the text */
+  usedFallbackTranscription?: boolean;
+  /** Which transcription provider produced the text (anthropic/openai/tesseract) */
+  transcriptionProvider?: string;
+  error?: string;
+}

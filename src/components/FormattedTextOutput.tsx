@@ -1,27 +1,38 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ProcessedTextPair } from '../types';
-import { formatTextPair, formatTextPairs } from '../utils/formatting';
-import { reconcileOutputText, OutputBlock } from '../utils/outputReconcile';
+import { formatTextPair } from '../utils/formatting';
+import { reconcileOutputText, joinOutputBlocks, OutputBlock } from '../utils/outputReconcile';
 import { Copy, CheckCircle, Download, Share2, RotateCcw } from 'lucide-react';
 
 interface FormattedTextOutputProps {
   textPairs: ProcessedTextPair[];
+  /**
+   * Book Page mode: preformatted Mochi card blocks (one per passage,
+   * already including the '# ' prefix and cloze markup). When given,
+   * these replace the pair-derived blocks; copy / share / download /
+   * manual-edit-reconcile behavior is identical.
+   */
+  rawBlocks?: OutputBlock[];
+  /** Chip text shown instead of the pair-based cloze/bold counts. */
+  statsLabel?: string;
 }
 
 const blocksForPairs = (pairs: ProcessedTextPair[]): OutputBlock[] =>
   pairs.map((pair) => ({ id: pair.id, block: formatTextPair(pair) }));
 
-const FormattedTextOutput: React.FC<FormattedTextOutputProps> = ({ textPairs }) => {
+const FormattedTextOutput: React.FC<FormattedTextOutputProps> = ({ textPairs, rawBlocks, statsLabel }) => {
   const [copied, setCopied] = useState(false);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
+
+  const derivedBlocks = rawBlocks ?? blocksForPairs(textPairs);
 
   // The final text is state, not a pure derivation of textPairs: the
   // user can edit it directly, and those manual edits persist. When a
   // pair changes upstream, reconcileOutputText merges the change into
   // this text card-by-card, preserving manual edits to other cards.
-  const [outputText, setOutputText] = useState<string>(() => formatTextPairs(textPairs));
+  const [outputText, setOutputText] = useState<string>(() => joinOutputBlocks(derivedBlocks));
   const outputTextRef = useRef(outputText);
-  const prevBlocksRef = useRef<OutputBlock[]>(blocksForPairs(textPairs));
+  const prevBlocksRef = useRef<OutputBlock[]>(derivedBlocks);
 
   const applyOutputText = (text: string) => {
     outputTextRef.current = text;
@@ -30,15 +41,15 @@ const FormattedTextOutput: React.FC<FormattedTextOutputProps> = ({ textPairs }) 
 
   // Merge upstream pair changes into the editable output.
   useEffect(() => {
-    const nextBlocks = blocksForPairs(textPairs);
+    const nextBlocks = rawBlocks ?? blocksForPairs(textPairs);
     const reconciled = reconcileOutputText(outputTextRef.current, prevBlocksRef.current, nextBlocks);
     prevBlocksRef.current = nextBlocks;
     if (reconciled !== outputTextRef.current) {
       applyOutputText(reconciled);
     }
-  }, [textPairs]);
+  }, [textPairs, rawBlocks]);
 
-  const generatedText = formatTextPairs(textPairs);
+  const generatedText = joinOutputBlocks(rawBlocks ?? blocksForPairs(textPairs));
   const hasManualEdits = outputText !== generatedText;
 
   const handleCopy = async () => {
@@ -112,10 +123,18 @@ const FormattedTextOutput: React.FC<FormattedTextOutputProps> = ({ textPairs }) 
       <div className="border-b px-4 py-3 bg-gradient-to-r from-gray-50 to-white flex justify-between items-center">
         <div className="flex items-center gap-2">
           <h3 className="font-medium text-gray-700 text-sm">Mochi Output</h3>
-          {textPairs.length > 0 && (
-            <span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full border">
-              {totalClozes} cloze · {totalBolds} bold
-            </span>
+          {statsLabel ? (
+            rawBlocks && rawBlocks.length > 0 && (
+              <span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full border">
+                {statsLabel}
+              </span>
+            )
+          ) : (
+            textPairs.length > 0 && (
+              <span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full border">
+                {totalClozes} cloze · {totalBolds} bold
+              </span>
+            )
           )}
           {hasManualEdits && (
             <span className="text-[11px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">

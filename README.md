@@ -26,6 +26,18 @@ I am a **student**.
 - **Mobile-first**: 44px min touch targets, 16px inputs to prevent iOS zoom, paste from clipboard support (crucial for Android Chrome), camera capture, Web Share API, haptic feedback, sticky output bottom sheet.
 - **Cloud OCR optional**: Add Netlify function `/.netlify/functions/ocr` that proxies to Google Vision or OpenAI Vision (`gpt-4o-mini` vision is excellent at Duolingo UI). Set `VITE_OCR_PROVIDER=cloud` and add API keys in Netlify env. Falls back to Tesseract if not configured.
 
+### Book Page mode (new)
+
+The header toggle switches between **Duolingo** mode (above) and **Book page** mode, for making cloze cards from a photo of a single-language book or e-book page — dense prose, equations, and code included.
+
+1. **Import**: photograph the page (file picker, paste, or camera — multiple pages at once), or paste e-book text directly with *Paste text instead*.
+2. **Transcribe**: plain OCR mangles math and code, so a Netlify function (`netlify/functions/book-ocr.mjs`) sends the photo to a vision LLM (Anthropic if `ANTHROPIC_API_KEY` is set, else OpenAI `gpt-4o`) and returns faithful Markdown: math as LaTeX (`$...$` inline, `$$...$$` display — Mochi renders KaTeX), code/pseudocode in fenced blocks, headings/lists/tables preserved. With no cloud key configured it falls back to on-device Tesseract (`eng`) and flags the passage, since math/code will need hand-fixing.
+3. **Trim**: the whole page lands in a monospace editor. Select the focus paragraph and hit **Keep selection only**; **Reset** restores the full transcription at any time. A live preview (Markdown + KaTeX) updates as you edit.
+4. **Cloze**: select *any* span — a word, a phrase, a fragment inside a `$formula$`, a token inside a code fence — and press **Cloze all instances** (⌘L / Ctrl+L). Every occurrence is wrapped as one numbered Mochi group, `{{1::term}}`, `{{2::term}}`… (Mochi syntax: number prefix, no Anki-style `c`). All instances of a term hide together as a single card version. Chips under the editor list each group with its instance count; removing a group unwraps it and renumbers the rest.
+5. **Preview & output**: *Show answers* highlights all groups; *Card preview* blanks one chosen group at a time (boxed blank inside formulas), mirroring Mochi's per-group cards. Output is one Mochi card per passage (`# ` prefix, `-----` separators), reusing the same copy/download/edit output box as Duolingo mode.
+
+Cloze logic lives in the pure module `src/utils/bookCloze.ts`; run its tests with `node scripts/test-book-cloze.mjs`.
+
 ### Language support
 
 Architecture now uses a registry (`src/services/languageRegistry.ts`) instead of hardcoded `'spa' | 'jpn'`. Adding a new Duolingo language is 1 config entry:
@@ -86,6 +98,10 @@ src/
     DuolingoProcessor.tsx        # Concurrency, language registry, mobile UX
     ImageUpload.tsx              # Clipboard paste + camera capture
     FormattedTextOutput.tsx      # Modern clipboard API, Web Share, haptics
+    BookClozeProcessor.tsx       # Book Page mode: transcribe, trim, cloze-all-instances
+    MarkdownPreview.tsx          # Book mode preview: Markdown + KaTeX, cloze groups
+  services/
+    bookOCR.ts                   # Book transcription client (cloud fn + Tesseract fallback)
   services/
     japaneseTokenizer.ts        # Intl.Segmenter + kuromoji lazy CDN loader + POS
     tokenizer.ts                # Generic dispatcher
@@ -96,6 +112,7 @@ src/
     formatting.ts               # Now supports {{{kanji}(yomi)}} + token-based formatting
 netlify/functions/
   ocr.mjs                       # Cloud OCR proxy (Google Vision / OpenAI Vision)
+  book-ocr.mjs                  # Book Page transcription (Anthropic / OpenAI vision -> Markdown)
 ```
 
 ## Future roadmap
